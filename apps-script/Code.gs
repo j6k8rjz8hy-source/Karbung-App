@@ -4,13 +4,30 @@
  * Execute as: Me, Who has access: Anyone.
  * Salin Web app URL ke aplikasi Karbung.
  */
+// ID spreadsheet tujuan (bagian URL antara /d/ dan /edit).
+// Boleh kosong ('') HANYA jika skrip dibuat dari dalam sheet (Extensions -> Apps Script).
+var SHEET_ID = '';
 var SHEET_NAME = 'Karangan Bunga';
 // ID folder Drive tujuan foto. Kosongkan ('') untuk membuat folder otomatis.
 var FOTO_FOLDER_ID = '17ZHPnNNnIV2-MWOOhjwvkGvdyliC5wJu';
 var FOTO_FOLDER = 'Foto Karangan Bunga'; // fallback bila ID kosong/tidak bisa diakses
 var HEADERS = ['Tanggal Penerimaan','Jenis Karangan','Pengirim','Ditujukan Ke','Grouping','Catatan','Foto','CID'];
 
-function doGet(){ return out_({ok:true, app:'karbung'}); }
+function doGet(){
+  try{
+    var ss = getSpreadsheet_();
+    return out_({ok:true, app:'karbung', sheetName:ss.getName()});
+  }catch(e){
+    return out_({ok:true, app:'karbung', sheetError:String(e)});
+  }
+}
+
+function getSpreadsheet_(){
+  if(SHEET_ID) return SpreadsheetApp.openById(SHEET_ID);
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  if(!ss) throw new Error('Skrip tidak menempel di spreadsheet. Isi SHEET_ID di baris atas kode.');
+  return ss;
+}
 
 function doPost(e){
   var lock = LockService.getScriptLock();
@@ -43,7 +60,7 @@ function doPost(e){
 }
 
 function getSheet_(){
-  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var ss = getSpreadsheet_();
   var sh = ss.getSheetByName(SHEET_NAME) || ss.insertSheet(SHEET_NAME);
   if(sh.getLastRow() === 0){
     sh.appendRow(HEADERS);
