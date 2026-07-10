@@ -291,8 +291,10 @@ const JENIS_DEFAULT=['Bunga Papan','Standing Flower','Krans','Bunga Meja','Salib
 let items=[], photoBlob=null, editingId=null;
 const $=id=>document.getElementById(id);
 const objUrls=new Map();
+function fotoBlobOf(rec){ if(!rec.foto) return null;
+  return rec.foto instanceof Blob ? rec.foto : new Blob([rec.foto],{type:'image/jpeg'}); }
 function urlFor(rec){ if(!rec.foto) return null;
-  if(!objUrls.has(rec.id)) objUrls.set(rec.id,URL.createObjectURL(rec.foto));
+  if(!objUrls.has(rec.id)) objUrls.set(rec.id,URL.createObjectURL(fotoBlobOf(rec)));
   return objUrls.get(rec.id); }
 function esc(s){ return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 function toast(msg){ const t=$('toast'); t.textContent=msg; t.classList.add('show');
@@ -407,7 +409,7 @@ async function pushRec(rec){
   const payload={action:'upsert',cid:rec.cid,tanggal:rec.tanggal,jenis:rec.jenis,
     pengirim:rec.pengirim,tujuan:rec.tujuan||'',grouping:rec.grouping||'',catatan:rec.catatan||''};
   if(rec.foto&&!rec.fotoUploaded){
-    payload.fotoBase64=(await blobToDataUrl(rec.foto)).split(',')[1];
+    payload.fotoBase64=(await blobToDataUrl(fotoBlobOf(rec))).split(',')[1];
     payload.fotoName=rec.tanggal+' - '+rec.pengirim;
   }
   const res=await fetch(url,{method:'POST',body:JSON.stringify(payload)});
@@ -487,11 +489,14 @@ async function save(){
     catatan:$('fCatatan').value.trim(), createdAt:Date.now(), synced:false };
   if(editingId!=null){ rec.id=editingId;
     const old=items.find(i=>i.id===editingId);
-    rec.foto=photoBlob||old.foto||null; rec.createdAt=old.createdAt;
+    rec.foto=photoBlob?await photoBlob.arrayBuffer()
+      :(old.foto instanceof Blob?await old.foto.arrayBuffer():old.foto||null);
+    rec.createdAt=old.createdAt;
     rec.cid=old.cid||newCid();
     rec.fotoUploaded=photoBlob?false:(old.fotoUploaded||false);
     objUrls.delete(editingId);
-  } else { rec.foto=photoBlob; rec.cid=newCid(); rec.fotoUploaded=false; }
+  } else { rec.foto=photoBlob?await photoBlob.arrayBuffer():null;
+    rec.cid=newCid(); rec.fotoUploaded=false; }
   const key=await dbPut(rec); if(rec.id==null) rec.id=key;
   items=await dbAll();
   toast(editingId!=null?'Perubahan disimpan':'Karangan tersimpan ('+items.length+' total)');
@@ -669,7 +674,7 @@ $('btnBackup').onclick=async()=>{
   toast('Menyiapkan backup…');
   const out=[];
   for(const i of items){ const{foto,...rest}=i;
-    out.push({...rest, fotoData:foto?await blobToDataUrl(foto):null}); }
+    out.push({...rest, fotoData:foto?await blobToDataUrl(fotoBlobOf(i)):null}); }
   dlBlob(new Blob([JSON.stringify({app:'karbung',v:1,nama:eventName(),items:out})],
     {type:'application/json'}), 'Backup Karbung - '+eventName()+' - '+todayStr()+'.json');
   toast('Backup diunduh — simpan ke Google Drive'); };
@@ -681,7 +686,7 @@ $('fileBackup').onchange=async e=>{
     let n=0;
     for(const it of data.items){ const{id,fotoData,...rest}=it;
       await dbPut({...rest, cid:rest.cid||newCid(), synced:false,
-        foto:fotoData?await dataUrlToBlob(fotoData):null}); n++; }
+        foto:fotoData?await (await dataUrlToBlob(fotoData)).arrayBuffer():null}); n++; }
     items=await dbAll(); refreshDatalists(); renderAll(); toast(n+' data dipulihkan');
   }catch(err){ toast('File backup tidak valid'); } };
 
