@@ -341,7 +341,8 @@ const APPS_SCRIPT_CODE=`/** Karbung - penghubung Google Sheets.
 // ID spreadsheet tujuan (bagian URL antara /d/ dan /edit).
 // Boleh kosong ('') HANYA jika skrip dibuat dari dalam sheet (Extensions -> Apps Script).
 var SHEET_ID = '';
-var SHEET_NAME = 'Karangan Bunga';
+// Nama tab data. Bila tidak ditemukan, dipakai tab PERTAMA di spreadsheet.
+var SHEET_NAME = 'Sheet 1';
 // ID folder Drive tujuan foto. Kosongkan ('') untuk membuat folder otomatis.
 var FOTO_FOLDER_ID = '17ZHPnNNnIV2-MWOOhjwvkGvdyliC5wJu';
 var FOTO_FOLDER = 'Foto Karangan Bunga'; // fallback bila ID kosong/tidak bisa diakses
@@ -358,20 +359,33 @@ function doGet(e){
 }
 
 function listRows_(){
-  var sh = getSheet_();
-  var last = sh.getLastRow();
-  var items = [];
-  if(last >= 2){
-    var vals = sh.getRange(2, 1, last - 1, HEADERS.length).getValues();
-    for(var i = 0; i < vals.length; i++){
-      var r = vals[i];
-      if(!r[7]) continue; // hanya baris yang punya CID (ditulis oleh app)
-      items.push({ tanggal:toIso_(r[0]), jenis:String(r[1]||''), pengirim:String(r[2]||''),
-        tujuan:String(r[3]||''), grouping:String(r[4]||''), catatan:String(r[5]||''),
-        fotoUrl:String(r[6]||''), cid:String(r[7]) });
+  var lock = LockService.getScriptLock();
+  lock.waitLock(20000);
+  try{
+    var sh = getSheet_();
+    var last = sh.getLastRow();
+    var items = [];
+    if(last >= 2){
+      var vals = sh.getRange(2, 1, last - 1, HEADERS.length).getValues();
+      for(var i = 0; i < vals.length; i++){
+        var r = vals[i];
+        var pengirim = String(r[2]||'').trim();
+        if(!pengirim || pengirim.toLowerCase() === 'pengirim') continue;
+        var cid = String(r[7]||'');
+        if(!cid){
+          // Baris ketikan manual di sheet: beri ID agar ikut tampil di app.
+          cid = Utilities.getUuid();
+          sh.getRange(i + 2, 8).setValue(cid);
+        }
+        items.push({ tanggal:toIso_(r[0]), jenis:String(r[1]||''), pengirim:pengirim,
+          tujuan:String(r[3]||''), grouping:String(r[4]||''), catatan:String(r[5]||''),
+          fotoUrl:String(r[6]||''), cid:cid });
+      }
     }
+    return {ok:true, app:'karbung', items:items};
+  }finally{
+    lock.releaseLock();
   }
-  return {ok:true, app:'karbung', items:items};
 }
 
 function toIso_(v){
@@ -419,7 +433,7 @@ function doPost(e){
 
 function getSheet_(){
   var ss = getSpreadsheet_();
-  var sh = ss.getSheetByName(SHEET_NAME) || ss.insertSheet(SHEET_NAME);
+  var sh = ss.getSheetByName(SHEET_NAME) || ss.getSheets()[0] || ss.insertSheet(SHEET_NAME);
   if(sh.getLastRow() === 0){
     sh.appendRow(HEADERS);
     sh.getRange(1, 1, 1, HEADERS.length).setFontWeight('bold');
