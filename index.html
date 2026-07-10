@@ -239,6 +239,7 @@ td.num,th.num{text-align:right;}
       <h3 style="font-size:.95rem;">Impor</h3>
       <p style="color:var(--muted); font-size:.83rem;">Impor CSV dari Google Sheets (File → Download → CSV) atau pulihkan file backup dari HP lain. Data digabung, tidak menimpa.</p>
       <div class="tools">
+        <button class="btn small" id="btnImportText">📋 Impor copy‑paste dari Sheets</button>
         <button class="btn small secondary" id="btnImportCsv">📄 Impor CSV</button>
         <button class="btn small secondary" id="btnRestore">♻️ Pulihkan backup</button>
       </div>
@@ -677,27 +678,61 @@ function normDate(s){ s=String(s||'').trim();
   const m=s.match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})$/);
   if(m){ let[,d,mo,y]=m; if(y.length===2)y='20'+y;
     return y+'-'+mo.padStart(2,'0')+'-'+d.padStart(2,'0'); }
+  const MO={jan:1,feb:2,mar:3,apr:4,may:5,mei:5,jun:6,jul:7,aug:8,agu:8,agt:8,
+    sep:9,oct:10,okt:10,nov:11,dec:12,des:12};
+  const m2=s.match(/^(\d{1,2})\s+([A-Za-z]+)\.?\s+(\d{4})$/);
+  if(m2){ const mo=MO[m2[2].slice(0,3).toLowerCase()];
+    if(mo) return m2[3]+'-'+String(mo).padStart(2,'0')+'-'+m2[1].padStart(2,'0'); }
   return s||todayStr(); }
+async function importRows(rows){
+  if(!rows.length){ toast('Data kosong'); return 0; }
+  const head=rows[0].map(h=>String(h||'').toLowerCase());
+  const col=(...keys)=>head.findIndex(h=>keys.some(k=>h.includes(k)));
+  let iT=col('tanggal','date'), iJ=col('jenis','type'),
+    iP=col('pengirim','sender','dari'), iD=col('ditujukan','tujuan','untuk','kepada'),
+    iG=col('grouping','group','kelompok'), iC=col('catatan','note','ket');
+  let body=rows.slice(1);
+  // Tanpa baris judul yang dikenali: pakai urutan kolom sheet keluarga.
+  if(iP<0){ iT=0; iJ=1; iP=2; iD=3; iG=4; iC=-1; body=rows; }
+  let n=0;
+  for(const r of body){
+    const pengirim=String(r[iP]||'').trim();
+    if(!pengirim||pengirim.toLowerCase()==='pengirim') continue;
+    await dbPut({ tanggal:normDate(iT>=0?String(r[iT]||''):''),
+      jenis:(iJ>=0&&String(r[iJ]||'').trim())||'Bunga Papan',
+      pengirim, tujuan:iD>=0?String(r[iD]||'').trim():'',
+      grouping:iG>=0?String(r[iG]||'').trim():'',
+      catatan:iC>=0?String(r[iC]||'').trim():'', foto:null, createdAt:Date.now()+n,
+      cid:newCid(), synced:false, fotoUploaded:false }); n++; }
+  items=await dbAll(); refreshDatalists(); renderAll();
+  toast(n? n+' baris diimpor':'Tidak ada baris yang bisa diimpor');
+  return n;
+}
 $('btnImportCsv').onclick=()=>$('fileCsv').click();
 $('fileCsv').onchange=async e=>{
   const f=e.target.files[0]; e.target.value=''; if(!f) return;
-  const rows=parseCsv((await f.text()).replace(/^﻿/,''));
-  if(rows.length<2){ toast('CSV kosong'); return; }
-  const head=rows[0].map(h=>h.toLowerCase());
-  const col=(...keys)=>head.findIndex(h=>keys.some(k=>h.includes(k)));
-  const iT=col('tanggal','date'), iJ=col('jenis','type'),
-    iP=col('pengirim','sender','dari'), iD=col('ditujukan','tujuan','untuk','kepada'),
-    iG=col('grouping','group','kelompok'), iC=col('catatan','note','ket');
-  if(iP<0){ toast('Kolom Pengirim tidak ditemukan di CSV'); return; }
-  let n=0;
-  for(const r of rows.slice(1)){
-    const pengirim=(r[iP]||'').trim(); if(!pengirim) continue;
-    await dbPut({ tanggal:normDate(iT>=0?r[iT]:''), jenis:(iJ>=0&&(r[iJ]||'').trim())||'Bunga Papan',
-      pengirim, tujuan:iD>=0?(r[iD]||'').trim():'', grouping:iG>=0?(r[iG]||'').trim():'',
-      catatan:iC>=0?(r[iC]||'').trim():'', foto:null, createdAt:Date.now()+n,
-      cid:newCid(), synced:false, fotoUploaded:false }); n++; }
-  items=await dbAll(); refreshDatalists(); renderAll();
-  toast(n+' baris diimpor'); };
+  if(/\.xlsx?$/i.test(f.name)){ toast('File Excel belum didukung — pakai "Impor copy-paste" saja'); return; }
+  await importRows(parseCsv((await f.text()).replace(/^﻿/,''))); };
+$('btnImportText').onclick=()=>{
+  const m=$('modal');
+  m.innerHTML='<div class="sheet"><div class="sheet-head"><h2>Impor copy‑paste</h2>'+
+    '<button class="xbtn" id="mClose">✕</button></div>'+
+    '<p style="color:var(--muted); font-size:.85rem;">Di Google Sheets/Excel: blok sel datanya (boleh ikut baris judul) → Salin. Lalu tempel di kotak ini.</p>'+
+    '<textarea id="pasteBox" class="copybox" rows="10" placeholder="Tempel data di sini…"></textarea>'+
+    '<button class="btn block" id="btnDoPaste">Impor</button></div>';
+  m.classList.remove('hidden');
+  m.onclick=e=>{ if(e.target===m) m.classList.add('hidden'); };
+  $('mClose').onclick=()=>m.classList.add('hidden');
+  $('btnDoPaste').onclick=async()=>{
+    const txt=$('pasteBox').value.replace(/^﻿/,'').trim();
+    if(!txt){ toast('Tempel dulu datanya'); return; }
+    const rows=txt.includes('\t')
+      ? txt.split(/\r?\n/).map(l=>l.split('\t')).filter(r=>r.some(c=>c.trim()))
+      : parseCsv(txt);
+    const n=await importRows(rows);
+    if(n) m.classList.add('hidden');
+  };
+};
 
 /* ================= Backup / restore (JSON with photos) ================= */
 function blobToDataUrl(b){ return new Promise(res=>{ const r=new FileReader();
