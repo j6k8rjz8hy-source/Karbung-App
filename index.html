@@ -330,7 +330,9 @@ const APPS_SCRIPT_CODE=`/** Karbung - penghubung Google Sheets.
  * Salin Web app URL ke aplikasi Karbung.
  */
 var SHEET_NAME = 'Karangan Bunga';
-var FOTO_FOLDER = 'Foto Karangan Bunga';
+// ID folder Drive tujuan foto. Kosongkan ('') untuk membuat folder otomatis.
+var FOTO_FOLDER_ID = '17ZHPnNNnIV2-MWOOhjwvkGvdyliC5wJu';
+var FOTO_FOLDER = 'Foto Karangan Bunga'; // fallback bila ID kosong/tidak bisa diakses
 var HEADERS = ['Tanggal Penerimaan','Jenis Karangan','Pengirim','Ditujukan Ke','Grouping','Catatan','Foto','CID'];
 
 function doGet(){ return out_({ok:true, app:'karbung'}); }
@@ -386,9 +388,16 @@ function findRow_(sh, cid){
   return -1;
 }
 
-function savePhoto_(d){
+function getFotoFolder_(){
+  if(FOTO_FOLDER_ID){
+    try{ return DriveApp.getFolderById(FOTO_FOLDER_ID); }catch(e){}
+  }
   var it = DriveApp.getFoldersByName(FOTO_FOLDER);
-  var folder = it.hasNext() ? it.next() : DriveApp.createFolder(FOTO_FOLDER);
+  return it.hasNext() ? it.next() : DriveApp.createFolder(FOTO_FOLDER);
+}
+
+function savePhoto_(d){
+  var folder = getFotoFolder_();
   var name = ((d.fotoName || d.cid) + '').replace(/[\\\\/:*?"<>|]/g, '_') + '.jpg';
   var blob = Utilities.newBlob(Utilities.base64Decode(d.fotoBase64), 'image/jpeg', name);
   var file = folder.createFile(blob);
