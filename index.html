@@ -182,7 +182,10 @@ td.num,th.num{text-align:right;}
       <select id="filterJenis"><option value="">Semua jenis</option></select>
       <select id="filterTanggal"><option value="">Semua tanggal</option></select>
     </div>
-    <div class="count-line" id="countLine"></div>
+    <div style="display:flex; align-items:center; gap:8px;">
+      <div class="count-line" id="countLine" style="flex:1;"></div>
+      <button class="btn small secondary" id="btnRefresh" title="Muat catatan terbaru dari Google Sheets">🔄 Perbarui</button>
+    </div>
     <div id="list"></div>
   </section>
 
@@ -294,9 +297,14 @@ const $=id=>document.getElementById(id);
 const objUrls=new Map();
 function fotoBlobOf(rec){ if(!rec.foto) return null;
   return rec.foto instanceof Blob ? rec.foto : new Blob([rec.foto],{type:'image/jpeg'}); }
-function urlFor(rec){ if(!rec.foto) return null;
-  if(!objUrls.has(rec.id)) objUrls.set(rec.id,URL.createObjectURL(fotoBlobOf(rec)));
-  return objUrls.get(rec.id); }
+function driveThumb(u){ const m=String(u||'').match(/[-\w]{25,}/);
+  return m?('https://drive.google.com/thumbnail?id='+m[0]+'&sz=w800'):null; }
+function urlFor(rec){
+  if(rec.foto){
+    if(!objUrls.has(rec.id)) objUrls.set(rec.id,URL.createObjectURL(fotoBlobOf(rec)));
+    return objUrls.get(rec.id);
+  }
+  return rec.fotoUrl?driveThumb(rec.fotoUrl):null; }
 function esc(s){ return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 function toast(msg){ const t=$('toast'); t.textContent=msg; t.classList.add('show');
   clearTimeout(t._h); t._h=setTimeout(()=>t.classList.remove('show'),2200); }
@@ -339,13 +347,37 @@ var FOTO_FOLDER_ID = '17ZHPnNNnIV2-MWOOhjwvkGvdyliC5wJu';
 var FOTO_FOLDER = 'Foto Karangan Bunga'; // fallback bila ID kosong/tidak bisa diakses
 var HEADERS = ['Tanggal Penerimaan','Jenis Karangan','Pengirim','Ditujukan Ke','Grouping','Catatan','Foto','CID'];
 
-function doGet(){
+function doGet(e){
   try{
+    if(e && e.parameter && e.parameter.action === 'list') return out_(listRows_());
     var ss = getSpreadsheet_();
     return out_({ok:true, app:'karbung', sheetName:ss.getName()});
-  }catch(e){
-    return out_({ok:true, app:'karbung', sheetError:String(e)});
+  }catch(err){
+    return out_({ok:true, app:'karbung', sheetError:String(err)});
   }
+}
+
+function listRows_(){
+  var sh = getSheet_();
+  var last = sh.getLastRow();
+  var items = [];
+  if(last >= 2){
+    var vals = sh.getRange(2, 1, last - 1, HEADERS.length).getValues();
+    for(var i = 0; i < vals.length; i++){
+      var r = vals[i];
+      if(!r[7]) continue; // hanya baris yang punya CID (ditulis oleh app)
+      items.push({ tanggal:toIso_(r[0]), jenis:String(r[1]||''), pengirim:String(r[2]||''),
+        tujuan:String(r[3]||''), grouping:String(r[4]||''), catatan:String(r[5]||''),
+        fotoUrl:String(r[6]||''), cid:String(r[7]) });
+    }
+  }
+  return {ok:true, app:'karbung', items:items};
+}
+
+function toIso_(v){
+  if(v instanceof Date)
+    return Utilities.formatDate(v, Session.getScriptTimeZone(), 'yyyy-MM-dd');
+  return String(v||'');
 }
 
 function getSpreadsheet_(){
@@ -491,6 +523,50 @@ $('btnTestSync').onclick=async()=>{
     else toast('✓ Tersambung ke Google Sheets');
   }catch(e){ toast('Gagal terhubung — cek URL & deployment (akses: Anyone)'); } };
 $('btnSyncAll').onclick=()=>syncAll(true);
+
+/* Tarik data dari sheet: gabung catatan semua orang (live) */
+let pulling=false;
+async function pullFromSheet(manual){
+  const url=syncUrlVal(); if(!url||pulling||syncing) return;
+  pulling=true;
+  try{
+    const j=await(await fetch(url+(url.includes('?')?'&':'?')+'action=list')).json();
+    if(!j.ok||!Array.isArray(j.items)) throw new Error(j.error||'respons tidak valid');
+    const byCid=new Map(items.filter(i=>i.cid).map(i=>[i.cid,i]));
+    const remote=new Set();
+    let changed=0;
+    for(const r of j.items){
+      if(!r.cid) continue;
+      remote.add(r.cid);
+      const loc=byCid.get(r.cid);
+      if(!loc){
+        await dbPut({ tanggal:normDate(r.tanggal), jenis:r.jenis||'Bunga Papan',
+          pengirim:r.pengirim, tujuan:r.tujuan, grouping:r.grouping, catatan:r.catatan,
+          foto:null, fotoUrl:r.fotoUrl||'', cid:r.cid, synced:true,
+          fotoUploaded:!!r.fotoUrl, createdAt:Date.now()+changed });
+        changed++;
+      }else if(loc.synced){
+        const upd={...loc, tanggal:normDate(r.tanggal), jenis:r.jenis||loc.jenis,
+          pengirim:r.pengirim, tujuan:r.tujuan, grouping:r.grouping,
+          catatan:r.catatan, fotoUrl:r.fotoUrl||loc.fotoUrl||''};
+        const key=x=>[x.tanggal,x.jenis,x.pengirim,x.tujuan,x.grouping,x.catatan,x.fotoUrl||''].join('|');
+        if(key(upd)!==key(loc)){ await dbPut(upd); changed++; }
+      }
+      // catatan lokal yang belum tersinkron dibiarkan — akan terkirim lewat push
+    }
+    for(const i of items){
+      if(i.cid&&i.synced&&!remote.has(i.cid)){
+        await dbDel(i.id); objUrls.delete(i.id); changed++;
+      }
+    }
+    if(changed){ items=await dbAll(); refreshDatalists(); renderAll(); }
+    if(manual) toast(changed?('🔄 Diperbarui — '+changed+' perubahan'):'Sudah paling baru ✓');
+  }catch(e){ if(manual) toast('Gagal memuat dari Sheets: '+((e&&e.message)||e)); }
+  finally{ pulling=false; }
+}
+setInterval(()=>{ if(!document.hidden&&syncUrlVal()) pullFromSheet(false); },60000);
+document.addEventListener('visibilitychange',()=>{
+  if(!document.hidden&&syncUrlVal()) pullFromSheet(false); });
 $('btnCopyGs').onclick=async()=>{
   try{ await navigator.clipboard.writeText(APPS_SCRIPT_CODE); toast('Kode disalin — tempel di Apps Script'); }
   catch(e){ toast('Gagal menyalin'); } };
@@ -600,7 +676,8 @@ function openDetail(id){
     (i.catatan?'<div><span>Catatan</span>'+esc(i.catatan)+'</div>':'')+
     '</div><div class="row-btns">'+
     '<button class="btn secondary" id="mEdit">✏️ Ubah</button>'+
-    (u?'<button class="btn secondary" id="mDl">⬇️ Foto</button>':'')+
+    (i.foto?'<button class="btn secondary" id="mDl">⬇️ Foto</button>'
+      :(i.fotoUrl?'<a class="btn secondary" href="'+esc(i.fotoUrl)+'" target="_blank" rel="noopener" style="text-decoration:none;">🖼️ Drive</a>':''))+
     '<button class="btn danger" id="mDel">Hapus</button></div></div>';
   m.classList.remove('hidden');
   m.onclick=e=>{ if(e.target===m) m.classList.add('hidden'); };
@@ -619,7 +696,7 @@ function openDetail(id){
     $('photoPreviewWrap').innerHTML=u?'<img class="thumb" src="'+u+'">':'<div class="ph">📷</div>';
     renderJenisChips(); $('btnSimpan').textContent='✓ Simpan perubahan';
     switchTab('catat'); window.scrollTo({top:0}); };
-  const dl=$('mDl'); if(dl) dl.onclick=()=>{
+  const dl=$('mDl'); if(dl&&i.foto) dl.onclick=()=>{
     const a=document.createElement('a'); a.href=u;
     a.download=(i.tanggal+' - '+i.pengirim).replace(/[\\/:*?"<>|]/g,'_')+'.jpg'; a.click(); };
 }
@@ -779,6 +856,8 @@ function switchTab(name){
 }
 document.querySelector('nav.tabs').addEventListener('click',e=>{
   const b=e.target.closest('button'); if(b) switchTab(b.dataset.tab); });
+$('btnRefresh').onclick=()=>{ if(!syncUrlVal()){ toast('Sambungkan Google Sheets dulu di tab Data'); return; }
+  toast('Memuat…'); pullFromSheet(true); };
 function renderAll(){ renderFilters(); renderList(); renderRekap(); updateSyncStatus(); }
 
 /* ================= Init ================= */
@@ -800,7 +879,10 @@ function renderAll(){ renderFilters(); renderList(); renderRekap(); updateSyncSt
   $('setNama').value=localStorage.getItem('karbung_nama')||'';
   $('setSync').value=localStorage.getItem('karbung_sync')||'';
   updateTitle(); renderJenisChips(); refreshDatalists(); renderAll();
-  if(syncUrlVal()&&items.some(i=>!i.synced)) syncAll(false);
+  if(syncUrlVal()){
+    if(items.some(i=>!i.synced)) await syncAll(false);
+    pullFromSheet(false);
+  }
 })();
 </script>
 </body>
