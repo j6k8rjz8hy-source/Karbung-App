@@ -466,7 +466,11 @@ function out_(o){
 
 // URL Web App bawaan — otomatis aktif di semua perangkat tanpa setup.
 // Kosongkan ('') bila ingin tiap perangkat mengisi sendiri di tab Data.
-const DEFAULT_SYNC_URL='https://script.google.com/macros/s/AKfycbz2OFqd-wlMG2Z6eYOS7X6leVoqyxjkHxrLeg9ouKq_xCNHOIQIAD7x6Ntzen2t7UyA/exec';
+const DEFAULT_SYNC_URL='https://script.google.com/macros/s/AKfycbx51rgmhqEGPIDECwi92zqzAhkodko0UtZhCMprm44fPYWDMUHlSeAOsca_8VLDenW1/exec';
+// URL deployment lama: ganti otomatis ke bawaan baru bila masih tersimpan.
+const OLD_SYNC_URLS=['https://script.google.com/macros/s/AKfycbz2OFqd-wlMG2Z6eYOS7X6leVoqyxjkHxrLeg9ouKq_xCNHOIQIAD7x6Ntzen2t7UyA/exec'];
+if(OLD_SYNC_URLS.includes((localStorage.getItem('karbung_sync')||'').trim()))
+  localStorage.removeItem('karbung_sync');
 function syncUrlVal(){
   return (localStorage.getItem('karbung_sync')||DEFAULT_SYNC_URL).trim(); }
 function newCid(){ return crypto.randomUUID?crypto.randomUUID():'c'+Date.now()+Math.random().toString(16).slice(2); }
