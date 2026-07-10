@@ -206,7 +206,29 @@ td.num,th.num{text-align:right;}
   <!-- TAB: DATA -->
   <section id="tab-data" class="hidden">
     <div class="card">
-      <h3 style="font-size:.95rem;">Ekspor &amp; sinkron ke Google Sheets</h3>
+      <h3 style="font-size:.95rem;">☁️ Link otomatis ke Google Sheets</h3>
+      <p style="color:var(--muted); font-size:.83rem;">Sekali disambungkan, setiap karangan yang disimpan otomatis masuk ke Google Sheets — fotonya diunggah ke Drive dan link-nya ikut tercatat di sheet.</p>
+      <label for="setSync">URL Web App (dari Apps Script)</label>
+      <input type="text" id="setSync" placeholder="https://script.google.com/macros/s/…/exec" autocomplete="off">
+      <div class="tools">
+        <button class="btn small secondary" id="btnTestSync">🔌 Uji koneksi</button>
+        <button class="btn small" id="btnSyncAll">☁️ Kirim yang belum tersinkron</button>
+      </div>
+      <p id="syncStatus" style="color:var(--muted); font-size:.83rem; margin-top:8px;"></p>
+      <details style="margin-top:10px;">
+        <summary style="cursor:pointer; font-size:.88rem; font-weight:600;">Cara menyambungkan (±3 menit, sekali saja)</summary>
+        <ol style="font-size:.85rem; color:var(--muted); padding-left:18px; margin-top:8px;">
+          <li>Buka/buat Google Sheet untuk pencatatan, lalu menu <b>Extensions → Apps Script</b>.</li>
+          <li>Hapus isi editor, tempel kode di bawah (tombol salin), lalu simpan.</li>
+          <li>Klik <b>Deploy → New deployment</b>, pilih tipe <b>Web app</b>. Set <i>Execute as: Me</i> dan <i>Who has access: Anyone</i>, lalu <b>Deploy</b> dan izinkan akses saat diminta.</li>
+          <li>Salin <b>Web app URL</b>, tempel di kolom di atas, klik <b>Uji koneksi</b>, lalu <b>Kirim yang belum tersinkron</b>.</li>
+        </ol>
+        <button class="btn small secondary" id="btnCopyGs" style="margin-top:6px;">📋 Salin kode Apps Script</button>
+        <p style="color:var(--muted); font-size:.78rem; margin-top:8px;">Catatan: kalau app dibuka lewat halaman pratinjau Claude, koneksi keluar diblokir — pakai versi GitHub Pages (atau buka file <code>index.html</code> langsung) agar sinkron otomatis jalan.</p>
+      </details>
+    </div>
+    <div class="card">
+      <h3 style="font-size:.95rem;">Ekspor manual</h3>
       <p style="color:var(--muted); font-size:.83rem;">CSV berisi kolom yang sama dengan sheet kalian: tanggal penerimaan, jenis, pengirim, ditujukan ke, grouping. Buka file CSV lalu copy‑paste ke Google Sheets.</p>
       <div class="tools">
         <button class="btn small" id="btnCsv">⬇️ Ekspor CSV</button>
@@ -298,6 +320,139 @@ async function handlePhoto(file){ if(!file) return;
     $('photoPreviewWrap').innerHTML='<img class="thumb" src="'+URL.createObjectURL(photoBlob)+'" alt="foto">';
   }catch(e){ toast('Gagal memuat foto'); } }
 
+/* ================= Sinkron Google Sheets (Apps Script) ================= */
+const APPS_SCRIPT_CODE=`/** Karbung - penghubung Google Sheets.
+ * Tempel di Apps Script sheet pencatatan (Extensions -> Apps Script),
+ * lalu Deploy -> New deployment -> Web app,
+ * Execute as: Me, Who has access: Anyone.
+ * Salin Web app URL ke aplikasi Karbung.
+ */
+var SHEET_NAME = 'Karangan Bunga';
+var FOTO_FOLDER = 'Foto Karangan Bunga';
+var HEADERS = ['Tanggal Penerimaan','Jenis Karangan','Pengirim','Ditujukan Ke','Grouping','Catatan','Foto','CID'];
+
+function doGet(){ return out_({ok:true, app:'karbung'}); }
+
+function doPost(e){
+  var lock = LockService.getScriptLock();
+  lock.waitLock(20000);
+  try{
+    var d = JSON.parse(e.postData.contents);
+    var sh = getSheet_();
+    if(d.action === 'delete'){
+      var i = findRow_(sh, d.cid);
+      if(i > 0) sh.deleteRow(i);
+      return out_({ok:true});
+    }
+    var fotoUrl = '';
+    if(d.fotoBase64) fotoUrl = savePhoto_(d);
+    var row = [d.tanggal||'', d.jenis||'', d.pengirim||'', d.tujuan||'',
+               d.grouping||'', d.catatan||'', fotoUrl, d.cid];
+    var idx = findRow_(sh, d.cid);
+    if(idx > 0){
+      if(!fotoUrl) row[6] = sh.getRange(idx, 7).getValue();
+      sh.getRange(idx, 1, 1, HEADERS.length).setValues([row]);
+    } else {
+      sh.appendRow(row);
+    }
+    return out_({ok:true, fotoUrl:fotoUrl});
+  }catch(err){
+    return out_({ok:false, error:String(err)});
+  }finally{
+    lock.releaseLock();
+  }
+}
+
+function getSheet_(){
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sh = ss.getSheetByName(SHEET_NAME) || ss.insertSheet(SHEET_NAME);
+  if(sh.getLastRow() === 0){
+    sh.appendRow(HEADERS);
+    sh.getRange(1, 1, 1, HEADERS.length).setFontWeight('bold');
+    sh.setFrozenRows(1);
+  }
+  return sh;
+}
+
+function findRow_(sh, cid){
+  if(!cid) return -1;
+  var last = sh.getLastRow();
+  if(last < 2) return -1;
+  var cids = sh.getRange(2, HEADERS.length, last - 1, 1).getValues();
+  for(var i = 0; i < cids.length; i++)
+    if(String(cids[i][0]) === String(cid)) return i + 2;
+  return -1;
+}
+
+function savePhoto_(d){
+  var it = DriveApp.getFoldersByName(FOTO_FOLDER);
+  var folder = it.hasNext() ? it.next() : DriveApp.createFolder(FOTO_FOLDER);
+  var name = ((d.fotoName || d.cid) + '').replace(/[\\\\/:*?"<>|]/g, '_') + '.jpg';
+  var blob = Utilities.newBlob(Utilities.base64Decode(d.fotoBase64), 'image/jpeg', name);
+  var file = folder.createFile(blob);
+  file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+  return file.getUrl();
+}
+
+function out_(o){
+  return ContentService.createTextOutput(JSON.stringify(o))
+    .setMimeType(ContentService.MimeType.JSON);
+}`;
+
+function syncUrlVal(){ return (localStorage.getItem('karbung_sync')||'').trim(); }
+function newCid(){ return crypto.randomUUID?crypto.randomUUID():'c'+Date.now()+Math.random().toString(16).slice(2); }
+async function pushRec(rec){
+  const url=syncUrlVal(); if(!url) return false;
+  if(!rec.cid) rec.cid=newCid();
+  const payload={action:'upsert',cid:rec.cid,tanggal:rec.tanggal,jenis:rec.jenis,
+    pengirim:rec.pengirim,tujuan:rec.tujuan||'',grouping:rec.grouping||'',catatan:rec.catatan||''};
+  if(rec.foto&&!rec.fotoUploaded){
+    payload.fotoBase64=(await blobToDataUrl(rec.foto)).split(',')[1];
+    payload.fotoName=rec.tanggal+' - '+rec.pengirim;
+  }
+  const res=await fetch(url,{method:'POST',body:JSON.stringify(payload)});
+  const j=await res.json();
+  if(!j.ok) throw new Error(j.error||'ditolak');
+  rec.synced=true; if(payload.fotoBase64) rec.fotoUploaded=true;
+  await dbPut(rec);
+  return true;
+}
+let syncing=false;
+async function syncAll(manual){
+  if(syncing) return;
+  const url=syncUrlVal();
+  if(!url){ if(manual) toast('Tempel URL Web App dulu'); return; }
+  const pending=items.filter(i=>!i.synced);
+  if(!pending.length){ if(manual) toast('Semua sudah tersinkron ✓'); updateSyncStatus(); return; }
+  syncing=true; let ok=0,fail=0;
+  for(const rec of pending){
+    try{ await pushRec(rec); ok++; }catch(e){ fail++; }
+    updateSyncStatus('Mengirim ke Sheets… ('+ok+'/'+pending.length+')');
+  }
+  syncing=false; items=await dbAll(); updateSyncStatus();
+  if(fail){ if(manual) toast(ok+' terkirim, '+fail+' gagal — cek koneksi/URL'); }
+  else toast('☁️ '+ok+' terkirim ke Google Sheets');
+}
+function updateSyncStatus(msg){
+  const el=$('syncStatus'); if(!el) return;
+  if(msg){ el.textContent=msg; return; }
+  const n=items.filter(i=>!i.synced).length;
+  el.textContent=syncUrlVal()
+    ?(n? '⏳ '+n+' karangan belum tersinkron ke Sheets.':'✓ Semua karangan sudah tersinkron ke Sheets.')
+    :'Belum tersambung — buka "Cara menyambungkan" di bawah.';
+}
+$('setSync').oninput=e=>{ localStorage.setItem('karbung_sync',e.target.value.trim()); updateSyncStatus(); };
+$('btnTestSync').onclick=async()=>{
+  const url=syncUrlVal(); if(!url){ toast('Tempel URL Web App dulu'); return; }
+  toast('Menguji koneksi…');
+  try{ const j=await(await fetch(url)).json();
+    toast(j.app==='karbung'?'✓ Tersambung ke Google Sheets':'URL merespons, tapi bukan skrip Karbung');
+  }catch(e){ toast('Gagal terhubung — cek URL & deployment (akses: Anyone)'); } };
+$('btnSyncAll').onclick=()=>syncAll(true);
+$('btnCopyGs').onclick=async()=>{
+  try{ await navigator.clipboard.writeText(APPS_SCRIPT_CODE); toast('Kode disalin — tempel di Apps Script'); }
+  catch(e){ toast('Gagal menyalin'); } };
+
 /* ================= Form ================= */
 let selJenis=JENIS_DEFAULT[0];
 function renderJenisChips(){ $('jenisChips').innerHTML=JENIS_DEFAULT.map(j=>
@@ -322,16 +477,19 @@ async function save(){
   if(!pengirim){ toast('Isi nama pengirim dulu'); $('fPengirim').focus(); return; }
   const rec={ tanggal:$('fTanggal').value||todayStr(), jenis:selJenis, pengirim,
     tujuan:$('fTujuan').value.trim(), grouping:$('fGrouping').value.trim(),
-    catatan:$('fCatatan').value.trim(), createdAt:Date.now() };
+    catatan:$('fCatatan').value.trim(), createdAt:Date.now(), synced:false };
   if(editingId!=null){ rec.id=editingId;
     const old=items.find(i=>i.id===editingId);
     rec.foto=photoBlob||old.foto||null; rec.createdAt=old.createdAt;
+    rec.cid=old.cid||newCid();
+    rec.fotoUploaded=photoBlob?false:(old.fotoUploaded||false);
     objUrls.delete(editingId);
-  } else rec.foto=photoBlob;
-  await dbPut(rec);
+  } else { rec.foto=photoBlob; rec.cid=newCid(); rec.fotoUploaded=false; }
+  const key=await dbPut(rec); if(rec.id==null) rec.id=key;
   items=await dbAll();
   toast(editingId!=null?'Perubahan disimpan':'Karangan tersimpan ('+items.length+' total)');
   resetForm(); refreshDatalists(); renderAll();
+  if(syncUrlVal()) syncAll(false);
 }
 $('btnSimpan').onclick=save;
 $('btnCamera').onclick=()=>$('fileCamera').click();
@@ -401,6 +559,8 @@ function openDetail(id){
   $('mDel').onclick=async()=>{
     if(!confirm('Hapus karangan dari "'+i.pengirim+'"?')) return;
     await dbDel(id); objUrls.delete(id); items=await dbAll();
+    if(syncUrlVal()&&i.cid)
+      fetch(syncUrlVal(),{method:'POST',body:JSON.stringify({action:'delete',cid:i.cid})}).catch(()=>{});
     m.classList.add('hidden'); renderAll(); toast('Terhapus'); };
   $('mEdit').onclick=()=>{ m.classList.add('hidden');
     editingId=id; selJenis=i.jenis; photoBlob=null;
@@ -486,7 +646,8 @@ $('fileCsv').onchange=async e=>{
     const pengirim=(r[iP]||'').trim(); if(!pengirim) continue;
     await dbPut({ tanggal:normDate(iT>=0?r[iT]:''), jenis:(iJ>=0&&(r[iJ]||'').trim())||'Bunga Papan',
       pengirim, tujuan:iD>=0?(r[iD]||'').trim():'', grouping:iG>=0?(r[iG]||'').trim():'',
-      catatan:iC>=0?(r[iC]||'').trim():'', foto:null, createdAt:Date.now()+n }); n++; }
+      catatan:iC>=0?(r[iC]||'').trim():'', foto:null, createdAt:Date.now()+n,
+      cid:newCid(), synced:false, fotoUploaded:false }); n++; }
   items=await dbAll(); refreshDatalists(); renderAll();
   toast(n+' baris diimpor'); };
 
@@ -509,7 +670,8 @@ $('fileBackup').onchange=async e=>{
     if(data.app!=='karbung'||!Array.isArray(data.items)) throw new Error('format');
     let n=0;
     for(const it of data.items){ const{id,fotoData,...rest}=it;
-      await dbPut({...rest, foto:fotoData?await dataUrlToBlob(fotoData):null}); n++; }
+      await dbPut({...rest, cid:rest.cid||newCid(), synced:false,
+        foto:fotoData?await dataUrlToBlob(fotoData):null}); n++; }
     items=await dbAll(); refreshDatalists(); renderAll(); toast(n+' data dipulihkan');
   }catch(err){ toast('File backup tidak valid'); } };
 
@@ -534,7 +696,7 @@ function switchTab(name){
 }
 document.querySelector('nav.tabs').addEventListener('click',e=>{
   const b=e.target.closest('button'); if(b) switchTab(b.dataset.tab); });
-function renderAll(){ renderFilters(); renderList(); renderRekap(); }
+function renderAll(){ renderFilters(); renderList(); renderRekap(); updateSyncStatus(); }
 
 /* ================= Init ================= */
 (async function(){
@@ -542,7 +704,9 @@ function renderAll(){ renderFilters(); renderList(); renderRekap(); }
   items=await dbAll();
   $('fTanggal').value=todayStr();
   $('setNama').value=localStorage.getItem('karbung_nama')||'';
+  $('setSync').value=localStorage.getItem('karbung_sync')||'';
   updateTitle(); renderJenisChips(); refreshDatalists(); renderAll();
+  if(syncUrlVal()&&items.some(i=>!i.synced)) syncAll(false);
 })();
 </script>
 </body>
