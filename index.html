@@ -1,0 +1,713 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Karbung — Pencatat Karangan Bunga</title>
+<meta name="description" content="Aplikasi pencatat karangan bunga untuk rumah duka: foto, pengirim, jenis, grouping, dan rekap.">
+<style>
+:root{
+  --bg:#f6f5f1; --card:#ffffff; --ink:#22301f; --muted:#6b7263;
+  --line:#e3e1d8; --accent:#3d5a3a; --accent-ink:#ffffff; --soft:#eef0e8;
+  --danger:#a03d2e; --chip:#eceee4; --shadow:0 1px 4px rgba(30,40,25,.08);
+}
+@media (prefers-color-scheme: dark){
+  :root{ --bg:#171a14; --card:#20241c; --ink:#e8eadf; --muted:#9aa08e;
+    --line:#333a2d; --accent:#8fae86; --accent-ink:#16210f; --soft:#272c22;
+    --danger:#e08a76; --chip:#2c3226; --shadow:0 1px 4px rgba(0,0,0,.4); }
+}
+:root[data-theme="dark"]{ --bg:#171a14; --card:#20241c; --ink:#e8eadf; --muted:#9aa08e;
+  --line:#333a2d; --accent:#8fae86; --accent-ink:#16210f; --soft:#272c22;
+  --danger:#e08a76; --chip:#2c3226; --shadow:0 1px 4px rgba(0,0,0,.4); }
+:root[data-theme="light"]{ --bg:#f6f5f1; --card:#ffffff; --ink:#22301f; --muted:#6b7263;
+  --line:#e3e1d8; --accent:#3d5a3a; --accent-ink:#ffffff; --soft:#eef0e8;
+  --danger:#a03d2e; --chip:#eceee4; --shadow:0 1px 4px rgba(30,40,25,.08); }
+
+*{box-sizing:border-box; margin:0; padding:0;}
+body{ font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+  background:var(--bg); color:var(--ink); line-height:1.5; padding-bottom:84px;}
+header{ padding:18px 16px 10px; max-width:760px; margin:0 auto;}
+header h1{ font-size:1.25rem; font-weight:700; letter-spacing:.2px;}
+header p{ color:var(--muted); font-size:.85rem;}
+main{ max-width:760px; margin:0 auto; padding:0 12px;}
+.hidden{display:none !important;}
+
+/* Tabs */
+nav.tabs{ position:fixed; bottom:0; left:0; right:0; background:var(--card);
+  border-top:1px solid var(--line); display:flex; z-index:30;
+  padding-bottom:env(safe-area-inset-bottom);}
+nav.tabs button{ flex:1; padding:10px 4px 12px; background:none; border:none;
+  color:var(--muted); font-size:.78rem; cursor:pointer; display:flex;
+  flex-direction:column; align-items:center; gap:2px;}
+nav.tabs button .ic{font-size:1.3rem; line-height:1;}
+nav.tabs button.active{ color:var(--accent); font-weight:700;}
+
+/* Cards & form */
+.card{ background:var(--card); border:1px solid var(--line); border-radius:14px;
+  padding:16px; margin:12px 0; box-shadow:var(--shadow);}
+label{ display:block; font-size:.82rem; font-weight:600; color:var(--muted);
+  margin:12px 0 4px;}
+input[type=text],input[type=date],input[type=search],select,textarea{
+  width:100%; padding:10px 12px; border:1px solid var(--line); border-radius:10px;
+  background:var(--bg); color:var(--ink); font-size:1rem;}
+textarea{resize:vertical; min-height:56px;}
+input:focus,select:focus,textarea:focus{outline:2px solid var(--accent); border-color:transparent;}
+
+.chips{ display:flex; flex-wrap:wrap; gap:8px; margin-top:6px;}
+.chips button{ padding:7px 14px; border-radius:999px; border:1px solid var(--line);
+  background:var(--chip); color:var(--ink); font-size:.88rem; cursor:pointer;}
+.chips button.sel{ background:var(--accent); color:var(--accent-ink); border-color:var(--accent); font-weight:600;}
+
+.btn{ display:inline-flex; align-items:center; justify-content:center; gap:6px;
+  padding:12px 18px; border-radius:12px; border:none; font-size:1rem; font-weight:700;
+  cursor:pointer; background:var(--accent); color:var(--accent-ink);}
+.btn.secondary{ background:var(--soft); color:var(--ink); border:1px solid var(--line); font-weight:600;}
+.btn.danger{ background:transparent; color:var(--danger); border:1px solid var(--danger);}
+.btn.block{width:100%; margin-top:16px; scroll-margin-bottom:96px;}
+.btn.small{ padding:8px 12px; font-size:.85rem; border-radius:10px;}
+
+/* Photo picker */
+.photo-pick{ display:flex; gap:10px; align-items:center; margin-top:6px;}
+.photo-pick .thumb{ width:84px; height:84px; border-radius:12px; object-fit:cover;
+  border:1px solid var(--line); background:var(--soft);}
+.photo-pick .ph{ width:84px; height:84px; border-radius:12px; border:1px dashed var(--line);
+  display:flex; align-items:center; justify-content:center; color:var(--muted);
+  font-size:1.6rem; background:var(--soft);}
+
+/* List */
+.filters{ display:flex; gap:8px; margin:12px 0 4px; flex-wrap:wrap;}
+.filters input[type=search]{flex:1; min-width:160px;}
+.filters select{ width:auto; flex:0 1 auto; font-size:.9rem; padding:9px 10px;}
+.count-line{ color:var(--muted); font-size:.85rem; margin:8px 2px;}
+.item{ display:flex; gap:12px; background:var(--card); border:1px solid var(--line);
+  border-radius:14px; padding:10px; margin:10px 0; box-shadow:var(--shadow); cursor:pointer;}
+.item img,.item .noimg{ width:74px; height:74px; border-radius:10px; object-fit:cover;
+  flex-shrink:0; background:var(--soft); border:1px solid var(--line);
+  display:flex; align-items:center; justify-content:center; color:var(--muted); font-size:1.5rem;}
+.item .info{flex:1; min-width:0;}
+.item .info .from{ font-weight:700; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+.item .info .meta{ color:var(--muted); font-size:.82rem;}
+.badge{ display:inline-block; background:var(--chip); border-radius:999px;
+  padding:1px 10px; font-size:.75rem; margin-right:4px; margin-top:4px;}
+.badge.g{ background:var(--accent); color:var(--accent-ink);}
+
+/* Rekap */
+table{ width:100%; border-collapse:collapse; font-size:.92rem;}
+th,td{ text-align:left; padding:7px 8px; border-bottom:1px solid var(--line);}
+th{ color:var(--muted); font-size:.78rem; text-transform:uppercase; letter-spacing:.4px;}
+td.num,th.num{text-align:right;}
+.stat-row{ display:flex; gap:10px; flex-wrap:wrap;}
+.stat{ flex:1; min-width:100px; background:var(--card); border:1px solid var(--line);
+  border-radius:14px; padding:12px 14px; box-shadow:var(--shadow);}
+.stat .n{ font-size:1.6rem; font-weight:800; color:var(--accent);}
+.stat .l{ font-size:.78rem; color:var(--muted);}
+
+/* Modal */
+.modal{ position:fixed; inset:0; background:rgba(10,14,8,.55); z-index:50;
+  display:flex; align-items:flex-end; justify-content:center;}
+.modal .sheet{ background:var(--card); width:100%; max-width:760px;
+  border-radius:18px 18px 0 0; padding:18px 16px 26px; max-height:92vh; overflow-y:auto;}
+.modal .sheet img.big{ width:100%; max-height:45vh; object-fit:contain;
+  border-radius:12px; background:var(--soft);}
+.sheet-head{display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;}
+.sheet-head h2{font-size:1.05rem;}
+.xbtn{ background:var(--soft); border:1px solid var(--line); color:var(--ink);
+  border-radius:999px; width:34px; height:34px; font-size:1rem; cursor:pointer;}
+.detail-grid{margin:10px 0;}
+.detail-grid div{padding:6px 0; border-bottom:1px solid var(--line); font-size:.95rem;}
+.detail-grid span{color:var(--muted); font-size:.78rem; display:block;}
+.row-btns{display:flex; gap:10px; margin-top:14px;}
+.row-btns .btn{flex:1;}
+
+.toast{ position:fixed; left:50%; transform:translateX(-50%); bottom:96px;
+  background:var(--ink); color:var(--bg); padding:10px 18px; border-radius:999px;
+  font-size:.9rem; z-index:60; box-shadow:var(--shadow); opacity:0; transition:opacity .25s;
+  pointer-events:none;}
+.toast.show{opacity:1;}
+.tools{display:flex; gap:8px; flex-wrap:wrap; margin-top:10px;}
+.empty{ text-align:center; color:var(--muted); padding:40px 16px; font-size:.95rem;}
+.copybox{ width:100%; font-family:inherit; font-size:.9rem; margin-top:8px;}
+</style>
+</head>
+<body>
+<header>
+  <h1>🌸 Karbung</h1>
+  <p id="subTitle">Pencatat karangan bunga — rumah duka</p>
+</header>
+
+<main>
+  <!-- TAB: CATAT -->
+  <section id="tab-catat">
+    <div class="card">
+      <label>Foto karangan</label>
+      <div class="photo-pick">
+        <div id="photoPreviewWrap"><div class="ph" id="photoPh">📷</div></div>
+        <div style="display:flex; flex-direction:column; gap:8px;">
+          <button class="btn small secondary" id="btnCamera">📷 Ambil foto</button>
+          <button class="btn small secondary" id="btnGallery">🖼️ Dari galeri</button>
+        </div>
+        <input type="file" accept="image/*" capture="environment" id="fileCamera" class="hidden">
+        <input type="file" accept="image/*" id="fileGallery" class="hidden">
+      </div>
+
+      <label for="fTanggal">Tanggal penerimaan</label>
+      <input type="date" id="fTanggal">
+
+      <label>Jenis karangan</label>
+      <div class="chips" id="jenisChips"></div>
+
+      <label for="fPengirim">Pengirim (nama di papan)</label>
+      <input type="text" id="fPengirim" placeholder="cth: Keluarga Besar PT Maju Jaya" autocomplete="off">
+
+      <label for="fTujuan">Ditujukan ke</label>
+      <input type="text" id="fTujuan" list="dlTujuan" placeholder="cth: Keluarga / nama anak" autocomplete="off">
+      <datalist id="dlTujuan"></datalist>
+
+      <label for="fGrouping">Grouping</label>
+      <input type="text" id="fGrouping" list="dlGrouping" placeholder="cth: Relasi Anak ke-3, Gereja, Keluarga" autocomplete="off">
+      <datalist id="dlGrouping"></datalist>
+
+      <label for="fCatatan">Catatan (opsional)</label>
+      <textarea id="fCatatan" placeholder="cth: posisi di lorong kiri, sudah diucapkan terima kasih"></textarea>
+
+      <button class="btn block" id="btnSimpan">✓ Simpan karangan</button>
+    </div>
+  </section>
+
+  <!-- TAB: DAFTAR -->
+  <section id="tab-daftar" class="hidden">
+    <div class="filters">
+      <input type="search" id="q" placeholder="Cari pengirim / tujuan / catatan…">
+      <select id="filterGrouping"><option value="">Semua grouping</option></select>
+      <select id="filterJenis"><option value="">Semua jenis</option></select>
+      <select id="filterTanggal"><option value="">Semua tanggal</option></select>
+    </div>
+    <div class="count-line" id="countLine"></div>
+    <div id="list"></div>
+  </section>
+
+  <!-- TAB: REKAP -->
+  <section id="tab-rekap" class="hidden">
+    <div class="stat-row" id="statRow"></div>
+    <div class="card"><h3 style="font-size:.95rem; margin-bottom:6px;">Per grouping</h3>
+      <div style="overflow-x:auto;"><table id="tblGrouping"></table></div></div>
+    <div class="card"><h3 style="font-size:.95rem; margin-bottom:6px;">Per jenis karangan</h3>
+      <div style="overflow-x:auto;"><table id="tblJenis"></table></div></div>
+    <div class="card"><h3 style="font-size:.95rem; margin-bottom:6px;">Per tanggal</h3>
+      <div style="overflow-x:auto;"><table id="tblTanggal"></table></div></div>
+    <div class="card">
+      <h3 style="font-size:.95rem;">Daftar ucapan terima kasih</h3>
+      <p style="color:var(--muted); font-size:.83rem;">Daftar pengirim unik — siap disalin untuk kartu/ucapan terima kasih keluarga.</p>
+      <textarea class="copybox" id="thanksBox" rows="8" readonly></textarea>
+      <button class="btn small secondary" id="btnCopyThanks" style="margin-top:8px;">📋 Salin daftar</button>
+    </div>
+  </section>
+
+  <!-- TAB: DATA -->
+  <section id="tab-data" class="hidden">
+    <div class="card">
+      <h3 style="font-size:.95rem;">☁️ Link otomatis ke Google Sheets</h3>
+      <p style="color:var(--muted); font-size:.83rem;">Sekali disambungkan, setiap karangan yang disimpan otomatis masuk ke Google Sheets — fotonya diunggah ke Drive dan link-nya ikut tercatat di sheet.</p>
+      <label for="setSync">URL Web App (dari Apps Script)</label>
+      <input type="text" id="setSync" placeholder="https://script.google.com/macros/s/…/exec" autocomplete="off">
+      <div class="tools">
+        <button class="btn small secondary" id="btnTestSync">🔌 Uji koneksi</button>
+        <button class="btn small" id="btnSyncAll">☁️ Kirim yang belum tersinkron</button>
+      </div>
+      <p id="syncStatus" style="color:var(--muted); font-size:.83rem; margin-top:8px;"></p>
+      <details style="margin-top:10px;">
+        <summary style="cursor:pointer; font-size:.88rem; font-weight:600;">Cara menyambungkan (±3 menit, sekali saja)</summary>
+        <ol style="font-size:.85rem; color:var(--muted); padding-left:18px; margin-top:8px;">
+          <li>Buka/buat Google Sheet untuk pencatatan, lalu menu <b>Extensions → Apps Script</b>.</li>
+          <li>Hapus isi editor, tempel kode di bawah (tombol salin), lalu simpan.</li>
+          <li>Klik <b>Deploy → New deployment</b>, pilih tipe <b>Web app</b>. Set <i>Execute as: Me</i> dan <i>Who has access: Anyone</i>, lalu <b>Deploy</b> dan izinkan akses saat diminta.</li>
+          <li>Salin <b>Web app URL</b>, tempel di kolom di atas, klik <b>Uji koneksi</b>, lalu <b>Kirim yang belum tersinkron</b>.</li>
+        </ol>
+        <button class="btn small secondary" id="btnCopyGs" style="margin-top:6px;">📋 Salin kode Apps Script</button>
+        <p style="color:var(--muted); font-size:.78rem; margin-top:8px;">Catatan: kalau app dibuka lewat halaman pratinjau Claude, koneksi keluar diblokir — pakai versi GitHub Pages (atau buka file <code>index.html</code> langsung) agar sinkron otomatis jalan.</p>
+      </details>
+    </div>
+    <div class="card">
+      <h3 style="font-size:.95rem;">Ekspor manual</h3>
+      <p style="color:var(--muted); font-size:.83rem;">CSV berisi kolom yang sama dengan sheet kalian: tanggal penerimaan, jenis, pengirim, ditujukan ke, grouping. Buka file CSV lalu copy‑paste ke Google Sheets.</p>
+      <div class="tools">
+        <button class="btn small" id="btnCsv">⬇️ Ekspor CSV</button>
+        <button class="btn small secondary" id="btnBackup">💾 Backup lengkap (dengan foto)</button>
+      </div>
+    </div>
+    <div class="card">
+      <h3 style="font-size:.95rem;">Impor</h3>
+      <p style="color:var(--muted); font-size:.83rem;">Impor CSV dari Google Sheets (File → Download → CSV) atau pulihkan file backup dari HP lain. Data digabung, tidak menimpa.</p>
+      <div class="tools">
+        <button class="btn small secondary" id="btnImportCsv">📄 Impor CSV</button>
+        <button class="btn small secondary" id="btnRestore">♻️ Pulihkan backup</button>
+      </div>
+      <input type="file" id="fileCsv" accept=".csv,text/csv" class="hidden">
+      <input type="file" id="fileBackup" accept=".json,application/json" class="hidden">
+    </div>
+    <div class="card">
+      <h3 style="font-size:.95rem;">Pengaturan</h3>
+      <label for="setNama">Nama acara / almarhum (tampil di judul &amp; nama file)</label>
+      <input type="text" id="setNama" placeholder="cth: Alm. Benedictus Adhi Pranata">
+      <p style="color:var(--muted); font-size:.8rem; margin-top:10px;">Data tersimpan di HP/browser ini (offline, tanpa server). Lakukan backup berkala dan simpan filenya ke Google Drive.</p>
+      <button class="btn small danger" id="btnWipe" style="margin-top:10px;">🗑️ Hapus semua data</button>
+    </div>
+  </section>
+</main>
+
+<nav class="tabs">
+  <button data-tab="catat" class="active"><span class="ic">📝</span>Catat</button>
+  <button data-tab="daftar"><span class="ic">🌸</span>Daftar</button>
+  <button data-tab="rekap"><span class="ic">📊</span>Rekap</button>
+  <button data-tab="data"><span class="ic">💾</span>Data</button>
+</nav>
+
+<div class="toast" id="toast"></div>
+<div class="modal hidden" id="modal"></div>
+
+<script>
+'use strict';
+/* ================= IndexedDB ================= */
+const DB_NAME='karbung', STORE='arrangements';
+let db;
+function openDb(){ return new Promise((res,rej)=>{
+  const r=indexedDB.open(DB_NAME,1);
+  r.onupgradeneeded=e=>{ e.target.result.createObjectStore(STORE,{keyPath:'id',autoIncrement:true}); };
+  r.onsuccess=e=>{ db=e.target.result; res(); };
+  r.onerror=()=>rej(r.error);
+});}
+function tx(mode){ return db.transaction(STORE,mode).objectStore(STORE); }
+function dbAll(){ return new Promise((res,rej)=>{ const r=tx('readonly').getAll();
+  r.onsuccess=()=>res(r.result); r.onerror=()=>rej(r.error); }); }
+function dbPut(rec){ return new Promise((res,rej)=>{ const r=tx('readwrite').put(rec);
+  r.onsuccess=()=>res(r.result); r.onerror=()=>rej(r.error); }); }
+function dbDel(id){ return new Promise((res,rej)=>{ const r=tx('readwrite').delete(id);
+  r.onsuccess=()=>res(); r.onerror=()=>rej(r.error); }); }
+function dbClear(){ return new Promise((res,rej)=>{ const r=tx('readwrite').clear();
+  r.onsuccess=()=>res(); r.onerror=()=>rej(r.error); }); }
+
+/* ================= State & helpers ================= */
+const JENIS_DEFAULT=['Bunga Papan','Standing Flower','Krans','Bunga Meja','Salib Bunga','Lainnya'];
+let items=[], photoBlob=null, editingId=null;
+const $=id=>document.getElementById(id);
+const objUrls=new Map();
+function urlFor(rec){ if(!rec.foto) return null;
+  if(!objUrls.has(rec.id)) objUrls.set(rec.id,URL.createObjectURL(rec.foto));
+  return objUrls.get(rec.id); }
+function esc(s){ return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function toast(msg){ const t=$('toast'); t.textContent=msg; t.classList.add('show');
+  clearTimeout(t._h); t._h=setTimeout(()=>t.classList.remove('show'),2200); }
+function fmtDate(d){ if(!d) return '-';
+  const dt=new Date(d+'T00:00:00'); if(isNaN(dt)) return d;
+  return dt.toLocaleDateString('id-ID',{weekday:'short',day:'numeric',month:'short',year:'numeric'}); }
+function todayStr(){ const d=new Date();
+  return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+
+/* ================= Photo compression ================= */
+function compressImage(file,maxDim=1400,quality=.82){ return new Promise((res,rej)=>{
+  const img=new Image();
+  img.onload=()=>{ let{width:w,height:h}=img;
+    if(Math.max(w,h)>maxDim){ const k=maxDim/Math.max(w,h); w=Math.round(w*k); h=Math.round(h*k); }
+    const c=document.createElement('canvas'); c.width=w; c.height=h;
+    c.getContext('2d').drawImage(img,0,0,w,h);
+    c.toBlob(b=>b?res(b):rej(new Error('compress gagal')),'image/jpeg',quality);
+    URL.revokeObjectURL(img.src); };
+  img.onerror=()=>rej(new Error('bukan gambar'));
+  img.src=URL.createObjectURL(file);
+});}
+async function handlePhoto(file){ if(!file) return;
+  try{ photoBlob=await compressImage(file);
+    $('photoPreviewWrap').innerHTML='<img class="thumb" src="'+URL.createObjectURL(photoBlob)+'" alt="foto">';
+  }catch(e){ toast('Gagal memuat foto'); } }
+
+/* ================= Sinkron Google Sheets (Apps Script) ================= */
+const APPS_SCRIPT_CODE=`/** Karbung - penghubung Google Sheets.
+ * Tempel di Apps Script sheet pencatatan (Extensions -> Apps Script),
+ * lalu Deploy -> New deployment -> Web app,
+ * Execute as: Me, Who has access: Anyone.
+ * Salin Web app URL ke aplikasi Karbung.
+ */
+var SHEET_NAME = 'Karangan Bunga';
+var FOTO_FOLDER = 'Foto Karangan Bunga';
+var HEADERS = ['Tanggal Penerimaan','Jenis Karangan','Pengirim','Ditujukan Ke','Grouping','Catatan','Foto','CID'];
+
+function doGet(){ return out_({ok:true, app:'karbung'}); }
+
+function doPost(e){
+  var lock = LockService.getScriptLock();
+  lock.waitLock(20000);
+  try{
+    var d = JSON.parse(e.postData.contents);
+    var sh = getSheet_();
+    if(d.action === 'delete'){
+      var i = findRow_(sh, d.cid);
+      if(i > 0) sh.deleteRow(i);
+      return out_({ok:true});
+    }
+    var fotoUrl = '';
+    if(d.fotoBase64) fotoUrl = savePhoto_(d);
+    var row = [d.tanggal||'', d.jenis||'', d.pengirim||'', d.tujuan||'',
+               d.grouping||'', d.catatan||'', fotoUrl, d.cid];
+    var idx = findRow_(sh, d.cid);
+    if(idx > 0){
+      if(!fotoUrl) row[6] = sh.getRange(idx, 7).getValue();
+      sh.getRange(idx, 1, 1, HEADERS.length).setValues([row]);
+    } else {
+      sh.appendRow(row);
+    }
+    return out_({ok:true, fotoUrl:fotoUrl});
+  }catch(err){
+    return out_({ok:false, error:String(err)});
+  }finally{
+    lock.releaseLock();
+  }
+}
+
+function getSheet_(){
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sh = ss.getSheetByName(SHEET_NAME) || ss.insertSheet(SHEET_NAME);
+  if(sh.getLastRow() === 0){
+    sh.appendRow(HEADERS);
+    sh.getRange(1, 1, 1, HEADERS.length).setFontWeight('bold');
+    sh.setFrozenRows(1);
+  }
+  return sh;
+}
+
+function findRow_(sh, cid){
+  if(!cid) return -1;
+  var last = sh.getLastRow();
+  if(last < 2) return -1;
+  var cids = sh.getRange(2, HEADERS.length, last - 1, 1).getValues();
+  for(var i = 0; i < cids.length; i++)
+    if(String(cids[i][0]) === String(cid)) return i + 2;
+  return -1;
+}
+
+function savePhoto_(d){
+  var it = DriveApp.getFoldersByName(FOTO_FOLDER);
+  var folder = it.hasNext() ? it.next() : DriveApp.createFolder(FOTO_FOLDER);
+  var name = ((d.fotoName || d.cid) + '').replace(/[\\\\/:*?"<>|]/g, '_') + '.jpg';
+  var blob = Utilities.newBlob(Utilities.base64Decode(d.fotoBase64), 'image/jpeg', name);
+  var file = folder.createFile(blob);
+  file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+  return file.getUrl();
+}
+
+function out_(o){
+  return ContentService.createTextOutput(JSON.stringify(o))
+    .setMimeType(ContentService.MimeType.JSON);
+}`;
+
+function syncUrlVal(){ return (localStorage.getItem('karbung_sync')||'').trim(); }
+function newCid(){ return crypto.randomUUID?crypto.randomUUID():'c'+Date.now()+Math.random().toString(16).slice(2); }
+async function pushRec(rec){
+  const url=syncUrlVal(); if(!url) return false;
+  if(!rec.cid) rec.cid=newCid();
+  const payload={action:'upsert',cid:rec.cid,tanggal:rec.tanggal,jenis:rec.jenis,
+    pengirim:rec.pengirim,tujuan:rec.tujuan||'',grouping:rec.grouping||'',catatan:rec.catatan||''};
+  if(rec.foto&&!rec.fotoUploaded){
+    payload.fotoBase64=(await blobToDataUrl(rec.foto)).split(',')[1];
+    payload.fotoName=rec.tanggal+' - '+rec.pengirim;
+  }
+  const res=await fetch(url,{method:'POST',body:JSON.stringify(payload)});
+  const j=await res.json();
+  if(!j.ok) throw new Error(j.error||'ditolak');
+  rec.synced=true; if(payload.fotoBase64) rec.fotoUploaded=true;
+  await dbPut(rec);
+  return true;
+}
+let syncing=false;
+async function syncAll(manual){
+  if(syncing) return;
+  const url=syncUrlVal();
+  if(!url){ if(manual) toast('Tempel URL Web App dulu'); return; }
+  const pending=items.filter(i=>!i.synced);
+  if(!pending.length){ if(manual) toast('Semua sudah tersinkron ✓'); updateSyncStatus(); return; }
+  syncing=true; let ok=0,fail=0;
+  for(const rec of pending){
+    try{ await pushRec(rec); ok++; }catch(e){ fail++; }
+    updateSyncStatus('Mengirim ke Sheets… ('+ok+'/'+pending.length+')');
+  }
+  syncing=false; items=await dbAll(); updateSyncStatus();
+  if(fail){ if(manual) toast(ok+' terkirim, '+fail+' gagal — cek koneksi/URL'); }
+  else toast('☁️ '+ok+' terkirim ke Google Sheets');
+}
+function updateSyncStatus(msg){
+  const el=$('syncStatus'); if(!el) return;
+  if(msg){ el.textContent=msg; return; }
+  const n=items.filter(i=>!i.synced).length;
+  el.textContent=syncUrlVal()
+    ?(n? '⏳ '+n+' karangan belum tersinkron ke Sheets.':'✓ Semua karangan sudah tersinkron ke Sheets.')
+    :'Belum tersambung — buka "Cara menyambungkan" di bawah.';
+}
+$('setSync').oninput=e=>{ localStorage.setItem('karbung_sync',e.target.value.trim()); updateSyncStatus(); };
+$('btnTestSync').onclick=async()=>{
+  const url=syncUrlVal(); if(!url){ toast('Tempel URL Web App dulu'); return; }
+  toast('Menguji koneksi…');
+  try{ const j=await(await fetch(url)).json();
+    toast(j.app==='karbung'?'✓ Tersambung ke Google Sheets':'URL merespons, tapi bukan skrip Karbung');
+  }catch(e){ toast('Gagal terhubung — cek URL & deployment (akses: Anyone)'); } };
+$('btnSyncAll').onclick=()=>syncAll(true);
+$('btnCopyGs').onclick=async()=>{
+  try{ await navigator.clipboard.writeText(APPS_SCRIPT_CODE); toast('Kode disalin — tempel di Apps Script'); }
+  catch(e){ toast('Gagal menyalin'); } };
+
+/* ================= Form ================= */
+let selJenis=JENIS_DEFAULT[0];
+function renderJenisChips(){ $('jenisChips').innerHTML=JENIS_DEFAULT.map(j=>
+  '<button type="button" class="'+(j===selJenis?'sel':'')+'" data-j="'+esc(j)+'">'+esc(j)+'</button>').join('');
+}
+$('jenisChips').addEventListener('click',e=>{ const b=e.target.closest('button'); if(!b) return;
+  selJenis=b.dataset.j; renderJenisChips(); });
+
+function refreshDatalists(){
+  const uniq=k=>[...new Set(items.map(i=>i[k]).filter(Boolean))].sort();
+  $('dlGrouping').innerHTML=uniq('grouping').map(v=>'<option value="'+esc(v)+'">').join('');
+  $('dlTujuan').innerHTML=uniq('tujuan').map(v=>'<option value="'+esc(v)+'">').join('');
+}
+function resetForm(){ photoBlob=null; editingId=null;
+  $('photoPreviewWrap').innerHTML='<div class="ph" id="photoPh">📷</div>';
+  $('fPengirim').value=''; $('fCatatan').value='';
+  $('fTanggal').value=todayStr();
+  $('btnSimpan').textContent='✓ Simpan karangan';
+}
+async function save(){
+  const pengirim=$('fPengirim').value.trim();
+  if(!pengirim){ toast('Isi nama pengirim dulu'); $('fPengirim').focus(); return; }
+  const rec={ tanggal:$('fTanggal').value||todayStr(), jenis:selJenis, pengirim,
+    tujuan:$('fTujuan').value.trim(), grouping:$('fGrouping').value.trim(),
+    catatan:$('fCatatan').value.trim(), createdAt:Date.now(), synced:false };
+  if(editingId!=null){ rec.id=editingId;
+    const old=items.find(i=>i.id===editingId);
+    rec.foto=photoBlob||old.foto||null; rec.createdAt=old.createdAt;
+    rec.cid=old.cid||newCid();
+    rec.fotoUploaded=photoBlob?false:(old.fotoUploaded||false);
+    objUrls.delete(editingId);
+  } else { rec.foto=photoBlob; rec.cid=newCid(); rec.fotoUploaded=false; }
+  const key=await dbPut(rec); if(rec.id==null) rec.id=key;
+  items=await dbAll();
+  toast(editingId!=null?'Perubahan disimpan':'Karangan tersimpan ('+items.length+' total)');
+  resetForm(); refreshDatalists(); renderAll();
+  if(syncUrlVal()) syncAll(false);
+}
+$('btnSimpan').onclick=save;
+$('btnCamera').onclick=()=>$('fileCamera').click();
+$('btnGallery').onclick=()=>$('fileGallery').click();
+$('fileCamera').onchange=e=>{handlePhoto(e.target.files[0]); e.target.value='';};
+$('fileGallery').onchange=e=>{handlePhoto(e.target.files[0]); e.target.value='';};
+
+/* ================= List ================= */
+function filtered(){
+  const q=$('q').value.trim().toLowerCase(), g=$('filterGrouping').value,
+    j=$('filterJenis').value, t=$('filterTanggal').value;
+  return items.filter(i=>
+    (!q||[i.pengirim,i.tujuan,i.grouping,i.catatan].join(' ').toLowerCase().includes(q))&&
+    (!g||i.grouping===g)&&(!j||i.jenis===j)&&(!t||i.tanggal===t))
+    .sort((a,b)=>b.tanggal.localeCompare(a.tanggal)||b.createdAt-a.createdAt);
+}
+function renderFilters(){
+  const opt=(vals,cur,label)=>'<option value="">'+label+'</option>'+
+    vals.map(v=>'<option '+(v===cur?'selected':'')+' value="'+esc(v)+'">'+esc(v)+'</option>').join('');
+  const uniq=k=>[...new Set(items.map(i=>i[k]).filter(Boolean))].sort();
+  $('filterGrouping').innerHTML=opt(uniq('grouping'),$('filterGrouping').value,'Semua grouping');
+  $('filterJenis').innerHTML=opt(uniq('jenis'),$('filterJenis').value,'Semua jenis');
+  $('filterTanggal').innerHTML=opt(uniq('tanggal').reverse(),$('filterTanggal').value,'Semua tanggal');
+}
+function renderList(){
+  const rows=filtered();
+  $('countLine').textContent=rows.length+' dari '+items.length+' karangan';
+  if(!items.length){ $('list').innerHTML='<div class="empty">Belum ada karangan tercatat.<br>Mulai dari tab <b>Catat</b> 📝</div>'; return; }
+  if(!rows.length){ $('list').innerHTML='<div class="empty">Tidak ada yang cocok dengan filter.</div>'; return; }
+  $('list').innerHTML=rows.map(i=>{
+    const u=urlFor(i);
+    return '<div class="item" data-id="'+i.id+'">'+
+      (u?'<img src="'+u+'" alt="">':'<div class="noimg">🌸</div>')+
+      '<div class="info"><div class="from">'+esc(i.pengirim)+'</div>'+
+      '<div class="meta">'+fmtDate(i.tanggal)+(i.tujuan?' · untuk '+esc(i.tujuan):'')+'</div>'+
+      '<div><span class="badge">'+esc(i.jenis)+'</span>'+
+      (i.grouping?'<span class="badge g">'+esc(i.grouping)+'</span>':'')+'</div></div></div>';
+  }).join('');
+}
+['q','filterGrouping','filterJenis','filterTanggal'].forEach(id=>
+  $(id).addEventListener('input',renderList));
+$('list').addEventListener('click',e=>{
+  const el=e.target.closest('.item'); if(el) openDetail(+el.dataset.id); });
+
+/* ================= Detail modal ================= */
+function openDetail(id){
+  const i=items.find(x=>x.id===id); if(!i) return;
+  const u=urlFor(i);
+  const m=$('modal');
+  m.innerHTML='<div class="sheet"><div class="sheet-head"><h2>Detail karangan</h2>'+
+    '<button class="xbtn" id="mClose">✕</button></div>'+
+    (u?'<img class="big" src="'+u+'" alt="foto karangan">':'')+
+    '<div class="detail-grid">'+
+    '<div><span>Pengirim</span>'+esc(i.pengirim)+'</div>'+
+    '<div><span>Tanggal penerimaan</span>'+fmtDate(i.tanggal)+'</div>'+
+    '<div><span>Jenis</span>'+esc(i.jenis)+'</div>'+
+    '<div><span>Ditujukan ke</span>'+esc(i.tujuan||'-')+'</div>'+
+    '<div><span>Grouping</span>'+esc(i.grouping||'-')+'</div>'+
+    (i.catatan?'<div><span>Catatan</span>'+esc(i.catatan)+'</div>':'')+
+    '</div><div class="row-btns">'+
+    '<button class="btn secondary" id="mEdit">✏️ Ubah</button>'+
+    (u?'<button class="btn secondary" id="mDl">⬇️ Foto</button>':'')+
+    '<button class="btn danger" id="mDel">Hapus</button></div></div>';
+  m.classList.remove('hidden');
+  m.onclick=e=>{ if(e.target===m) m.classList.add('hidden'); };
+  $('mClose').onclick=()=>m.classList.add('hidden');
+  $('mDel').onclick=async()=>{
+    if(!confirm('Hapus karangan dari "'+i.pengirim+'"?')) return;
+    await dbDel(id); objUrls.delete(id); items=await dbAll();
+    if(syncUrlVal()&&i.cid)
+      fetch(syncUrlVal(),{method:'POST',body:JSON.stringify({action:'delete',cid:i.cid})}).catch(()=>{});
+    m.classList.add('hidden'); renderAll(); toast('Terhapus'); };
+  $('mEdit').onclick=()=>{ m.classList.add('hidden');
+    editingId=id; selJenis=i.jenis; photoBlob=null;
+    $('fTanggal').value=i.tanggal; $('fPengirim').value=i.pengirim;
+    $('fTujuan').value=i.tujuan||''; $('fGrouping').value=i.grouping||'';
+    $('fCatatan').value=i.catatan||'';
+    $('photoPreviewWrap').innerHTML=u?'<img class="thumb" src="'+u+'">':'<div class="ph">📷</div>';
+    renderJenisChips(); $('btnSimpan').textContent='✓ Simpan perubahan';
+    switchTab('catat'); window.scrollTo({top:0}); };
+  const dl=$('mDl'); if(dl) dl.onclick=()=>{
+    const a=document.createElement('a'); a.href=u;
+    a.download=(i.tanggal+' - '+i.pengirim).replace(/[\\/:*?"<>|]/g,'_')+'.jpg'; a.click(); };
+}
+
+/* ================= Rekap ================= */
+function countBy(key){ const m=new Map();
+  items.forEach(i=>{ const k=i[key]||'(kosong)'; m.set(k,(m.get(k)||0)+1); });
+  return [...m.entries()].sort((a,b)=>b[1]-a[1]); }
+function renderRekap(){
+  const withFoto=items.filter(i=>i.foto).length;
+  $('statRow').innerHTML=
+    '<div class="stat"><div class="n">'+items.length+'</div><div class="l">Total karangan</div></div>'+
+    '<div class="stat"><div class="n">'+new Set(items.map(i=>i.grouping).filter(Boolean)).size+'</div><div class="l">Grouping</div></div>'+
+    '<div class="stat"><div class="n">'+withFoto+'</div><div class="l">Sudah difoto</div></div>';
+  const tbl=(pairs,label)=>'<tr><th>'+label+'</th><th class="num">Jumlah</th></tr>'+
+    pairs.map(([k,v])=>'<tr><td>'+esc(k)+'</td><td class="num">'+v+'</td></tr>').join('');
+  $('tblGrouping').innerHTML=tbl(countBy('grouping'),'Grouping');
+  $('tblJenis').innerHTML=tbl(countBy('jenis'),'Jenis');
+  $('tblTanggal').innerHTML='<tr><th>Tanggal</th><th class="num">Jumlah</th></tr>'+
+    [...new Map(items.map(i=>[i.tanggal,0])).keys()].sort().map(t=>
+      '<tr><td>'+fmtDate(t)+'</td><td class="num">'+items.filter(i=>i.tanggal===t).length+'</td></tr>').join('');
+  $('thanksBox').value=[...new Set(items.map(i=>i.pengirim).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'id')).join('\n');
+}
+$('btnCopyThanks').onclick=async()=>{
+  try{ await navigator.clipboard.writeText($('thanksBox').value); toast('Daftar disalin'); }
+  catch(e){ $('thanksBox').select(); document.execCommand('copy'); toast('Daftar disalin'); } };
+
+/* ================= CSV export/import ================= */
+function csvCell(v){ v=String(v??''); return /[",\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v; }
+function eventName(){ return localStorage.getItem('karbung_nama')||'karangan-bunga'; }
+$('btnCsv').onclick=()=>{
+  const head=['No','Tanggal Penerimaan','Jenis Karangan','Pengirim','Ditujukan Ke','Grouping','Catatan'];
+  const rows=[...items].sort((a,b)=>a.tanggal.localeCompare(b.tanggal)||a.createdAt-b.createdAt)
+    .map((i,n)=>[n+1,i.tanggal,i.jenis,i.pengirim,i.tujuan,i.grouping,i.catatan]);
+  const csv='﻿'+[head,...rows].map(r=>r.map(csvCell).join(',')).join('\r\n');
+  dlBlob(new Blob([csv],{type:'text/csv'}),'Karangan Bunga - '+eventName()+'.csv');
+  toast('CSV diunduh — buka lalu paste ke Google Sheets'); };
+function dlBlob(blob,name){ const a=document.createElement('a');
+  a.href=URL.createObjectURL(blob); a.download=name; a.click();
+  setTimeout(()=>URL.revokeObjectURL(a.href),5000); }
+
+function parseCsv(text){
+  const rows=[]; let row=[],cell='',inQ=false;
+  for(let i=0;i<text.length;i++){ const c=text[i];
+    if(inQ){ if(c==='"'){ if(text[i+1]==='"'){cell+='"';i++;} else inQ=false; } else cell+=c; }
+    else if(c==='"') inQ=true;
+    else if(c===','){ row.push(cell); cell=''; }
+    else if(c==='\n'||c==='\r'){ if(c==='\r'&&text[i+1]==='\n') i++;
+      row.push(cell); rows.push(row); row=[]; cell=''; }
+    else cell+=c; }
+  if(cell!==''||row.length){ row.push(cell); rows.push(row); }
+  return rows.filter(r=>r.some(c=>c.trim()!==''));
+}
+function normDate(s){ s=String(s||'').trim();
+  if(/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0,10);
+  const m=s.match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})$/);
+  if(m){ let[,d,mo,y]=m; if(y.length===2)y='20'+y;
+    return y+'-'+mo.padStart(2,'0')+'-'+d.padStart(2,'0'); }
+  return s||todayStr(); }
+$('btnImportCsv').onclick=()=>$('fileCsv').click();
+$('fileCsv').onchange=async e=>{
+  const f=e.target.files[0]; e.target.value=''; if(!f) return;
+  const rows=parseCsv((await f.text()).replace(/^﻿/,''));
+  if(rows.length<2){ toast('CSV kosong'); return; }
+  const head=rows[0].map(h=>h.toLowerCase());
+  const col=(...keys)=>head.findIndex(h=>keys.some(k=>h.includes(k)));
+  const iT=col('tanggal','date'), iJ=col('jenis','type'),
+    iP=col('pengirim','sender','dari'), iD=col('ditujukan','tujuan','untuk','kepada'),
+    iG=col('grouping','group','kelompok'), iC=col('catatan','note','ket');
+  if(iP<0){ toast('Kolom Pengirim tidak ditemukan di CSV'); return; }
+  let n=0;
+  for(const r of rows.slice(1)){
+    const pengirim=(r[iP]||'').trim(); if(!pengirim) continue;
+    await dbPut({ tanggal:normDate(iT>=0?r[iT]:''), jenis:(iJ>=0&&(r[iJ]||'').trim())||'Bunga Papan',
+      pengirim, tujuan:iD>=0?(r[iD]||'').trim():'', grouping:iG>=0?(r[iG]||'').trim():'',
+      catatan:iC>=0?(r[iC]||'').trim():'', foto:null, createdAt:Date.now()+n,
+      cid:newCid(), synced:false, fotoUploaded:false }); n++; }
+  items=await dbAll(); refreshDatalists(); renderAll();
+  toast(n+' baris diimpor'); };
+
+/* ================= Backup / restore (JSON with photos) ================= */
+function blobToDataUrl(b){ return new Promise(res=>{ const r=new FileReader();
+  r.onload=()=>res(r.result); r.readAsDataURL(b); }); }
+async function dataUrlToBlob(u){ return (await fetch(u)).blob(); }
+$('btnBackup').onclick=async()=>{
+  toast('Menyiapkan backup…');
+  const out=[];
+  for(const i of items){ const{foto,...rest}=i;
+    out.push({...rest, fotoData:foto?await blobToDataUrl(foto):null}); }
+  dlBlob(new Blob([JSON.stringify({app:'karbung',v:1,nama:eventName(),items:out})],
+    {type:'application/json'}), 'Backup Karbung - '+eventName()+' - '+todayStr()+'.json');
+  toast('Backup diunduh — simpan ke Google Drive'); };
+$('btnRestore').onclick=()=>$('fileBackup').click();
+$('fileBackup').onchange=async e=>{
+  const f=e.target.files[0]; e.target.value=''; if(!f) return;
+  try{ const data=JSON.parse(await f.text());
+    if(data.app!=='karbung'||!Array.isArray(data.items)) throw new Error('format');
+    let n=0;
+    for(const it of data.items){ const{id,fotoData,...rest}=it;
+      await dbPut({...rest, cid:rest.cid||newCid(), synced:false,
+        foto:fotoData?await dataUrlToBlob(fotoData):null}); n++; }
+    items=await dbAll(); refreshDatalists(); renderAll(); toast(n+' data dipulihkan');
+  }catch(err){ toast('File backup tidak valid'); } };
+
+/* ================= Settings & wipe ================= */
+$('setNama').oninput=e=>{ localStorage.setItem('karbung_nama',e.target.value.trim());
+  updateTitle(); };
+function updateTitle(){ const n=localStorage.getItem('karbung_nama');
+  $('subTitle').textContent=n?('Karangan bunga — '+n):'Pencatat karangan bunga — rumah duka'; }
+$('btnWipe').onclick=async()=>{
+  if(!confirm('Hapus SEMUA data dan foto di perangkat ini? Pastikan sudah backup.')) return;
+  if(!confirm('Yakin? Tindakan ini tidak bisa dibatalkan.')) return;
+  await dbClear(); objUrls.clear(); items=[]; renderAll(); toast('Semua data dihapus'); };
+
+/* ================= Tabs ================= */
+function switchTab(name){
+  document.querySelectorAll('nav.tabs button').forEach(b=>
+    b.classList.toggle('active',b.dataset.tab===name));
+  ['catat','daftar','rekap','data'].forEach(t=>
+    $('tab-'+t).classList.toggle('hidden',t!==name));
+  if(name==='daftar'){ renderFilters(); renderList(); }
+  if(name==='rekap') renderRekap();
+}
+document.querySelector('nav.tabs').addEventListener('click',e=>{
+  const b=e.target.closest('button'); if(b) switchTab(b.dataset.tab); });
+function renderAll(){ renderFilters(); renderList(); renderRekap(); updateSyncStatus(); }
+
+/* ================= Init ================= */
+(async function(){
+  await openDb();
+  items=await dbAll();
+  $('fTanggal').value=todayStr();
+  $('setNama').value=localStorage.getItem('karbung_nama')||'';
+  $('setSync').value=localStorage.getItem('karbung_sync')||'';
+  updateTitle(); renderJenisChips(); refreshDatalists(); renderAll();
+  if(syncUrlVal()&&items.some(i=>!i.synced)) syncAll(false);
+})();
+</script>
+</body>
+</html>
