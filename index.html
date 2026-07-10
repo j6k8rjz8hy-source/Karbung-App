@@ -418,7 +418,11 @@ function savePhoto_(d){
   var name = ((d.fotoName || d.cid) + '').replace(/[\\\\/:*?"<>|]/g, '_') + '.jpg';
   var blob = Utilities.newBlob(Utilities.base64Decode(d.fotoBase64), 'image/jpeg', name);
   var file = folder.createFile(blob);
-  file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+  // Link publik hanya pelengkap; jangan gagalkan pencatatan bila akun
+  // tidak diizinkan membagikan file secara publik.
+  try{
+    file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+  }catch(e){}
   return file.getUrl();
 }
 
