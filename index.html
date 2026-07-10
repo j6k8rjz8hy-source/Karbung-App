@@ -495,7 +495,7 @@ async function pushRec(rec){
     pengirim:rec.pengirim,tujuan:rec.tujuan||'',grouping:rec.grouping||'',catatan:rec.catatan||''};
   if(rec.foto&&!rec.fotoUploaded){
     payload.fotoBase64=(await blobToDataUrl(fotoBlobOf(rec))).split(',')[1];
-    payload.fotoName=rec.tanggal+' - '+rec.pengirim;
+    payload.fotoName=rec.pengirim+(rec.grouping?'('+rec.grouping+')':'');
   }
   const res=await fetch(url,{method:'POST',body:JSON.stringify(payload)});
   const j=await res.json();
