@@ -417,16 +417,21 @@ async function pushRec(rec){
   await dbPut(rec);
   return true;
 }
-let syncing=false;
+let syncing=false, lastSyncError='';
 async function syncAll(manual){
   if(syncing) return;
   const url=syncUrlVal();
   if(!url){ if(manual) toast('Tempel URL Web App dulu'); return; }
   const pending=items.filter(i=>!i.synced);
   if(!pending.length){ if(manual) toast('Semua sudah tersinkron ✓'); updateSyncStatus(); return; }
-  syncing=true; let ok=0,fail=0;
+  syncing=true; let ok=0,fail=0; lastSyncError='';
   for(const rec of pending){
-    try{ await pushRec(rec); ok++; }catch(e){ fail++; }
+    try{ await pushRec(rec); ok++; }
+    catch(e){ fail++;
+      lastSyncError=(e&&e.message)||String(e);
+      if(/fetch|network/i.test(lastSyncError))
+        lastSyncError='tidak bisa terhubung — cek internet & deployment Apps Script (Who has access: Anyone)';
+    }
     updateSyncStatus('Mengirim ke Sheets… ('+ok+'/'+pending.length+')');
   }
   syncing=false; items=await dbAll(); updateSyncStatus();
@@ -438,7 +443,8 @@ function updateSyncStatus(msg){
   if(msg){ el.textContent=msg; return; }
   const n=items.filter(i=>!i.synced).length;
   el.textContent=syncUrlVal()
-    ?(n? '⏳ '+n+' karangan belum tersinkron ke Sheets.':'✓ Semua karangan sudah tersinkron ke Sheets.')
+    ?(n? '⏳ '+n+' karangan belum tersinkron ke Sheets.'+(lastSyncError?' Gagal terakhir: '+lastSyncError:'')
+        :'✓ Semua karangan sudah tersinkron ke Sheets.')
     :'Belum tersambung — buka "Cara menyambungkan" di bawah.';
 }
 $('setSync').oninput=e=>{ localStorage.setItem('karbung_sync',e.target.value.trim()); updateSyncStatus(); };
@@ -473,6 +479,7 @@ function resetForm(){ photoBlob=null; editingId=null;
   $('btnSimpan').textContent='✓ Simpan karangan';
 }
 async function save(){
+ try{
   const pengirim=$('fPengirim').value.trim();
   if(!pengirim){ toast('Isi nama pengirim dulu'); $('fPengirim').focus(); return; }
   const rec={ tanggal:$('fTanggal').value||todayStr(), jenis:selJenis, pengirim,
@@ -490,6 +497,9 @@ async function save(){
   toast(editingId!=null?'Perubahan disimpan':'Karangan tersimpan ('+items.length+' total)');
   resetForm(); refreshDatalists(); renderAll();
   if(syncUrlVal()) syncAll(false);
+ }catch(err){
+  toast('Gagal menyimpan: '+((err&&err.message)||err));
+ }
 }
 $('btnSimpan').onclick=save;
 $('btnCamera').onclick=()=>$('fileCamera').click();
@@ -700,7 +710,16 @@ function renderAll(){ renderFilters(); renderList(); renderRekap(); updateSyncSt
 
 /* ================= Init ================= */
 (async function(){
-  await openDb();
+  try{ await openDb(); }
+  catch(e){
+    document.querySelector('main').innerHTML=
+      '<div class="card" style="border-color:var(--danger);">'+
+      '<h3 style="color:var(--danger); font-size:.95rem;">Penyimpanan browser tidak tersedia</h3>'+
+      '<p style="font-size:.88rem; margin-top:6px;">Aplikasi tidak bisa menyimpan data di halaman/browser ini. Biasanya karena mode privat (incognito) atau halaman pratinjau yang membatasi penyimpanan.</p>'+
+      '<p style="font-size:.88rem; margin-top:6px;">Solusi: buka <b>https://j6k8rjz8hy-source.github.io/Karbung-App/</b> langsung di Chrome/Safari biasa (bukan incognito, bukan lewat pratinjau Claude).</p>'+
+      '<p style="color:var(--muted); font-size:.78rem; margin-top:8px;">Detail teknis: '+esc((e&&e.message)||e)+'</p></div>';
+    return;
+  }
   items=await dbAll();
   $('fTanggal').value=todayStr();
   $('setNama').value=localStorage.getItem('karbung_nama')||'';
