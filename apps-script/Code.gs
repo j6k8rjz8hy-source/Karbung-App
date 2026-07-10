@@ -13,13 +13,37 @@ var FOTO_FOLDER_ID = '17ZHPnNNnIV2-MWOOhjwvkGvdyliC5wJu';
 var FOTO_FOLDER = 'Foto Karangan Bunga'; // fallback bila ID kosong/tidak bisa diakses
 var HEADERS = ['Tanggal Penerimaan','Jenis Karangan','Pengirim','Ditujukan Ke','Grouping','Catatan','Foto','CID'];
 
-function doGet(){
+function doGet(e){
   try{
+    if(e && e.parameter && e.parameter.action === 'list') return out_(listRows_());
     var ss = getSpreadsheet_();
     return out_({ok:true, app:'karbung', sheetName:ss.getName()});
-  }catch(e){
-    return out_({ok:true, app:'karbung', sheetError:String(e)});
+  }catch(err){
+    return out_({ok:true, app:'karbung', sheetError:String(err)});
   }
+}
+
+function listRows_(){
+  var sh = getSheet_();
+  var last = sh.getLastRow();
+  var items = [];
+  if(last >= 2){
+    var vals = sh.getRange(2, 1, last - 1, HEADERS.length).getValues();
+    for(var i = 0; i < vals.length; i++){
+      var r = vals[i];
+      if(!r[7]) continue; // hanya baris yang punya CID (ditulis oleh app)
+      items.push({ tanggal:toIso_(r[0]), jenis:String(r[1]||''), pengirim:String(r[2]||''),
+        tujuan:String(r[3]||''), grouping:String(r[4]||''), catatan:String(r[5]||''),
+        fotoUrl:String(r[6]||''), cid:String(r[7]) });
+    }
+  }
+  return {ok:true, app:'karbung', items:items};
+}
+
+function toIso_(v){
+  if(v instanceof Date)
+    return Utilities.formatDate(v, Session.getScriptTimeZone(), 'yyyy-MM-dd');
+  return String(v||'');
 }
 
 function getSpreadsheet_(){
