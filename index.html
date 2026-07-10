@@ -464,7 +464,11 @@ function out_(o){
     .setMimeType(ContentService.MimeType.JSON);
 }`;
 
-function syncUrlVal(){ return (localStorage.getItem('karbung_sync')||'').trim(); }
+// URL Web App bawaan — otomatis aktif di semua perangkat tanpa setup.
+// Kosongkan ('') bila ingin tiap perangkat mengisi sendiri di tab Data.
+const DEFAULT_SYNC_URL='https://script.google.com/macros/s/AKfycbz2OFqd-wlMG2Z6eYOS7X6leVoqyxjkHxrLeg9ouKq_xCNHOIQIAD7x6Ntzen2t7UyA/exec';
+function syncUrlVal(){
+  return (localStorage.getItem('karbung_sync')||DEFAULT_SYNC_URL).trim(); }
 function newCid(){ return crypto.randomUUID?crypto.randomUUID():'c'+Date.now()+Math.random().toString(16).slice(2); }
 async function pushRec(rec){
   const url=syncUrlVal(); if(!url) return false;
@@ -877,7 +881,7 @@ function renderAll(){ renderFilters(); renderList(); renderRekap(); updateSyncSt
   items=await dbAll();
   $('fTanggal').value=todayStr();
   $('setNama').value=localStorage.getItem('karbung_nama')||'';
-  $('setSync').value=localStorage.getItem('karbung_sync')||'';
+  $('setSync').value=localStorage.getItem('karbung_sync')||DEFAULT_SYNC_URL;
   updateTitle(); renderJenisChips(); refreshDatalists(); renderAll();
   if(syncUrlVal()){
     if(items.some(i=>!i.synced)) await syncAll(false);
