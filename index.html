@@ -748,6 +748,8 @@ function renderAll(){ renderFilters(); renderList(); renderRekap(); updateSyncSt
 
 /* ================= Init ================= */
 (async function(){
+  if(navigator.storage&&navigator.storage.persist)
+    navigator.storage.persist().catch(()=>{});
   try{ await openDb(); }
   catch(e){
     document.querySelector('main').innerHTML=
