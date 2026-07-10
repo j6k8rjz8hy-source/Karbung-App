@@ -463,7 +463,7 @@ async function syncAll(manual){
     updateSyncStatus('Mengirim ke Sheets… ('+ok+'/'+pending.length+')');
   }
   syncing=false; items=await dbAll(); updateSyncStatus();
-  if(fail){ if(manual) toast(ok+' terkirim, '+fail+' gagal — cek koneksi/URL'); }
+  if(fail){ if(manual) toast(ok+' terkirim, '+fail+' gagal — '+(lastSyncError||'cek koneksi/URL')); }
   else toast('☁️ '+ok+' terkirim ke Google Sheets');
 }
 function updateSyncStatus(msg){
