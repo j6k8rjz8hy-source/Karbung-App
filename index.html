@@ -164,8 +164,7 @@ td.num,th.num{text-align:right;}
       <datalist id="dlTujuan"></datalist>
 
       <label for="fGrouping">Grouping</label>
-      <input type="text" id="fGrouping" list="dlGrouping" placeholder="cth: Relasi Anak ke-3, Gereja, Keluarga" autocomplete="off">
-      <datalist id="dlGrouping"></datalist>
+      <select id="fGrouping"></select>
 
       <label for="fCatatan">Catatan (opsional)</label>
       <textarea id="fCatatan" placeholder="cth: posisi di lorong kiri, sudah diucapkan terima kasih"></textarea>
@@ -291,7 +290,9 @@ function dbClear(){ return new Promise((res,rej)=>{ const r=tx('readwrite').clea
   r.onsuccess=()=>res(); r.onerror=()=>rej(r.error); }); }
 
 /* ================= State & helpers ================= */
-const JENIS_DEFAULT=['Bunga Papan','Standing Flower','Krans','Bunga Meja','Salib Bunga','Lainnya'];
+const JENIS_DEFAULT=['Papan','Standing','Banner','Lainnya'];
+const GROUPING_OPTIONS=['Michael Sabarudin','Angela Linda Suryani','Angelita Sung',
+  'Agnes Angelika','Gabriel Billy Pranata','Cypriana Liem','Rafael Pranata','Jasinta Tshai'];
 let items=[], photoBlob=null, editingId=null;
 const $=id=>document.getElementById(id);
 const objUrls=new Map();
@@ -562,7 +563,7 @@ async function pullFromSheet(manual){
       remote.add(r.cid);
       const loc=byCid.get(r.cid);
       if(!loc){
-        await dbPut({ tanggal:normDate(r.tanggal), jenis:r.jenis||'Bunga Papan',
+        await dbPut({ tanggal:normDate(r.tanggal), jenis:r.jenis||'Papan',
           pengirim:r.pengirim, tujuan:r.tujuan, grouping:r.grouping, catatan:r.catatan,
           foto:null, fotoUrl:r.fotoUrl||'', cid:r.cid, synced:true,
           fotoUploaded:!!r.fotoUrl, createdAt:Date.now()+changed });
@@ -595,15 +596,22 @@ $('btnCopyGs').onclick=async()=>{
 
 /* ================= Form ================= */
 let selJenis=JENIS_DEFAULT[0];
-function renderJenisChips(){ $('jenisChips').innerHTML=JENIS_DEFAULT.map(j=>
-  '<button type="button" class="'+(j===selJenis?'sel':'')+'" data-j="'+esc(j)+'">'+esc(j)+'</button>').join('');
+function renderJenisChips(){
+  const list=JENIS_DEFAULT.includes(selJenis)?JENIS_DEFAULT:[...JENIS_DEFAULT,selJenis];
+  $('jenisChips').innerHTML=list.map(j=>
+    '<button type="button" class="'+(j===selJenis?'sel':'')+'" data-j="'+esc(j)+'">'+esc(j)+'</button>').join('');
+}
+function setGroupingSelect(val){
+  const opts=GROUPING_OPTIONS.includes(val)||!val
+    ?GROUPING_OPTIONS:[...GROUPING_OPTIONS,val];
+  $('fGrouping').innerHTML='<option value="">— pilih grouping —</option>'+
+    opts.map(g=>'<option '+(g===val?'selected':'')+' value="'+esc(g)+'">'+esc(g)+'</option>').join('');
 }
 $('jenisChips').addEventListener('click',e=>{ const b=e.target.closest('button'); if(!b) return;
   selJenis=b.dataset.j; renderJenisChips(); });
 
 function refreshDatalists(){
   const uniq=k=>[...new Set(items.map(i=>i[k]).filter(Boolean))].sort();
-  $('dlGrouping').innerHTML=uniq('grouping').map(v=>'<option value="'+esc(v)+'">').join('');
   $('dlTujuan').innerHTML=uniq('tujuan').map(v=>'<option value="'+esc(v)+'">').join('');
 }
 function resetForm(){ photoBlob=null; editingId=null;
@@ -713,7 +721,7 @@ function openDetail(id){
   $('mEdit').onclick=()=>{ m.classList.add('hidden');
     editingId=id; selJenis=i.jenis; photoBlob=null;
     $('fTanggal').value=i.tanggal; $('fPengirim').value=i.pengirim;
-    $('fTujuan').value=i.tujuan||''; $('fGrouping').value=i.grouping||'';
+    $('fTujuan').value=i.tujuan||''; setGroupingSelect(i.grouping||'');
     $('fCatatan').value=i.catatan||'';
     $('photoPreviewWrap').innerHTML=u?'<img class="thumb" src="'+u+'">':'<div class="ph">📷</div>';
     renderJenisChips(); $('btnSimpan').textContent='✓ Simpan perubahan';
@@ -798,7 +806,7 @@ async function importRows(rows){
     const pengirim=String(r[iP]||'').trim();
     if(!pengirim||pengirim.toLowerCase()==='pengirim') continue;
     await dbPut({ tanggal:normDate(iT>=0?String(r[iT]||''):''),
-      jenis:(iJ>=0&&String(r[iJ]||'').trim())||'Bunga Papan',
+      jenis:(iJ>=0&&String(r[iJ]||'').trim())||'Papan',
       pengirim, tujuan:iD>=0?String(r[iD]||'').trim():'',
       grouping:iG>=0?String(r[iG]||'').trim():'',
       catatan:iC>=0?String(r[iC]||'').trim():'', foto:null, createdAt:Date.now()+n,
@@ -900,7 +908,7 @@ function renderAll(){ renderFilters(); renderList(); renderRekap(); updateSyncSt
   $('fTanggal').value=todayStr();
   $('setNama').value=localStorage.getItem('karbung_nama')||'';
   $('setSync').value=localStorage.getItem('karbung_sync')||DEFAULT_SYNC_URL;
-  updateTitle(); renderJenisChips(); refreshDatalists(); renderAll();
+  updateTitle(); renderJenisChips(); setGroupingSelect(''); refreshDatalists(); renderAll();
   if(syncUrlVal()){
     if(items.some(i=>!i.synced)) await syncAll(false);
     pullFromSheet(false);
