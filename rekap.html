@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Rekap Karangan Bunga</title>
+<meta name="description" content="Rekap live karangan bunga — halaman lihat-saja untuk keluarga.">
+<style>
+:root{
+  --bg:#f6f5f1; --card:#ffffff; --ink:#22301f; --muted:#6b7263;
+  --line:#e3e1d8; --accent:#3d5a3a; --accent-ink:#ffffff; --soft:#eef0e8;
+  --chip:#eceee4; --shadow:0 1px 4px rgba(30,40,25,.08);
+}
+@media (prefers-color-scheme: dark){
+  :root{ --bg:#171a14; --card:#20241c; --ink:#e8eadf; --muted:#9aa08e;
+    --line:#333a2d; --accent:#8fae86; --accent-ink:#16210f; --soft:#272c22;
+    --chip:#2c3226; --shadow:0 1px 4px rgba(0,0,0,.4); }
+}
+*{box-sizing:border-box; margin:0; padding:0;}
+body{ font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+  background:var(--bg); color:var(--ink); line-height:1.5; padding-bottom:32px;}
+header{ padding:18px 16px 6px; max-width:760px; margin:0 auto;}
+header h1{ font-size:1.2rem; font-weight:700;}
+header p{ color:var(--muted); font-size:.85rem;}
+main{ max-width:760px; margin:0 auto; padding:0 12px;}
+.card{ background:var(--card); border:1px solid var(--line); border-radius:14px;
+  padding:16px; margin:12px 0; box-shadow:var(--shadow);}
+.card h3{ font-size:.95rem; margin-bottom:6px;}
+.stat-row{ display:flex; gap:10px; flex-wrap:wrap; margin-top:12px;}
+.stat{ flex:1; min-width:100px; background:var(--card); border:1px solid var(--line);
+  border-radius:14px; padding:12px 14px; box-shadow:var(--shadow);}
+.stat .n{ font-size:1.6rem; font-weight:800; color:var(--accent); font-variant-numeric:tabular-nums;}
+.stat .l{ font-size:.78rem; color:var(--muted);}
+table{ width:100%; border-collapse:collapse; font-size:.92rem;}
+th,td{ text-align:left; padding:7px 8px; border-bottom:1px solid var(--line);}
+th{ color:var(--muted); font-size:.78rem; text-transform:uppercase; letter-spacing:.4px;}
+td.num,th.num{ text-align:right; font-variant-numeric:tabular-nums;}
+.filters{ display:flex; gap:8px; margin:12px 0 4px; flex-wrap:wrap;}
+.filters input,.filters select{ padding:9px 12px; border:1px solid var(--line);
+  border-radius:10px; background:var(--card); color:var(--ink); font-size:.95rem;}
+.filters input{ flex:1; min-width:150px;}
+.count-line{ color:var(--muted); font-size:.85rem; margin:8px 2px;}
+.item{ display:flex; gap:12px; background:var(--card); border:1px solid var(--line);
+  border-radius:14px; padding:10px; margin:10px 0; box-shadow:var(--shadow);}
+.item img,.item .noimg{ width:64px; height:64px; border-radius:10px; object-fit:cover;
+  flex-shrink:0; background:var(--soft); border:1px solid var(--line);
+  display:flex; align-items:center; justify-content:center; color:var(--muted); font-size:1.4rem;}
+.item .info{flex:1; min-width:0;}
+.item .from{ font-weight:700;}
+.item .meta{ color:var(--muted); font-size:.82rem;}
+.badge{ display:inline-block; background:var(--chip); border-radius:999px;
+  padding:1px 10px; font-size:.75rem; margin-right:4px; margin-top:4px;}
+.badge.g{ background:var(--accent); color:var(--accent-ink);}
+.status{ color:var(--muted); font-size:.8rem; text-align:center; margin:10px 0;}
+.empty{ text-align:center; color:var(--muted); padding:40px 16px;}
+a{color:var(--accent);}
+</style>
+</head>
+<body>
+<header>
+  <h1>🌸 Rekap Karangan Bunga</h1>
+  <p>Halaman pantauan — data langsung dari catatan keluarga, diperbarui otomatis.</p>
+</header>
+<main>
+  <div class="stat-row" id="statRow"></div>
+
+  <div class="card"><h3>Per grouping</h3>
+    <div style="overflow-x:auto;"><table id="tblGrouping"></table></div></div>
+  <div class="card"><h3>Per jenis karangan</h3>
+    <div style="overflow-x:auto;"><table id="tblJenis"></table></div></div>
+
+  <div class="card">
+    <h3>Daftar karangan</h3>
+    <div class="filters">
+      <input type="search" id="q" placeholder="Cari pengirim / tujuan…">
+      <select id="fg"><option value="">Semua grouping</option></select>
+    </div>
+    <div class="count-line" id="countLine"></div>
+    <div id="list"></div>
+  </div>
+
+  <p class="status" id="status">Memuat data…</p>
+</main>
+
+<script>
+'use strict';
+const SYNC_URL='https://script.google.com/macros/s/AKfycbx51rgmhqEGPIDECwi92zqzAhkodko0UtZhCMprm44fPYWDMUHlSeAOsca_8VLDenW1/exec';
+const $=id=>document.getElementById(id);
+let items=[];
+function esc(s){ return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function driveThumb(u){ const m=String(u||'').match(/[-\w]{25,}/);
+  return m?('https://drive.google.com/thumbnail?id='+m[0]+'&sz=w400'):null; }
+function fmtDate(d){ const dt=new Date(d+'T00:00:00');
+  return isNaN(dt)?d:dt.toLocaleDateString('id-ID',{weekday:'short',day:'numeric',month:'short'}); }
+
+function countBy(key){ const m=new Map();
+  items.forEach(i=>{ const k=i[key]||'(kosong)'; m.set(k,(m.get(k)||0)+1); });
+  return [...m.entries()].sort((a,b)=>b[1]-a[1]); }
+
+function render(){
+  $('statRow').innerHTML=
+    '<div class="stat"><div class="n">'+items.length+'</div><div class="l">Total karangan</div></div>'+
+    '<div class="stat"><div class="n">'+new Set(items.map(i=>i.grouping).filter(Boolean)).size+'</div><div class="l">Grouping</div></div>'+
+    '<div class="stat"><div class="n">'+items.filter(i=>i.fotoUrl).length+'</div><div class="l">Dengan foto</div></div>';
+  const tbl=(pairs,label)=>'<tr><th>'+label+'</th><th class="num">Jumlah</th></tr>'+
+    pairs.map(([k,v])=>'<tr><td>'+esc(k)+'</td><td class="num">'+v+'</td></tr>').join('');
+  $('tblGrouping').innerHTML=tbl(countBy('grouping'),'Grouping');
+  $('tblJenis').innerHTML=tbl(countBy('jenis'),'Jenis');
+  const cur=$('fg').value;
+  $('fg').innerHTML='<option value="">Semua grouping</option>'+
+    [...new Set(items.map(i=>i.grouping).filter(Boolean))].sort().map(g=>
+      '<option '+(g===cur?'selected':'')+' value="'+esc(g)+'">'+esc(g)+'</option>').join('');
+  renderList();
+}
+function renderList(){
+  const q=$('q').value.trim().toLowerCase(), g=$('fg').value;
+  const rows=items.filter(i=>
+    (!q||[i.pengirim,i.tujuan,i.grouping].join(' ').toLowerCase().includes(q))&&
+    (!g||i.grouping===g));
+  $('countLine').textContent=rows.length+' dari '+items.length+' karangan';
+  $('list').innerHTML=rows.length?rows.map(i=>{
+    const u=driveThumb(i.fotoUrl);
+    return '<div class="item">'+
+      (u?'<a href="'+esc(i.fotoUrl)+'" target="_blank" rel="noopener"><img src="'+u+'" alt="" loading="lazy" onerror="this.parentNode.outerHTML=\'<div class=noimg>🌸</div>\'"></a>':'<div class="noimg">🌸</div>')+
+      '<div class="info"><div class="from">'+esc(i.pengirim)+'</div>'+
+      '<div class="meta">'+fmtDate(i.tanggal)+(i.tujuan?' · untuk '+esc(i.tujuan):'')+'</div>'+
+      '<div><span class="badge">'+esc(i.jenis||'-')+'</span>'+
+      (i.grouping?'<span class="badge g">'+esc(i.grouping)+'</span>':'')+'</div></div></div>';
+  }).join(''):'<div class="empty">Tidak ada yang cocok.</div>';
+}
+['q','fg'].forEach(id=>$(id).addEventListener('input',renderList));
+
+async function load(){
+  try{
+    const j=await(await fetch(SYNC_URL+'?action=list')).json();
+    if(!j.ok||!Array.isArray(j.items)) throw new Error(j.error||'respons tidak valid');
+    items=j.items.filter(i=>i.pengirim);
+    render();
+    $('status').textContent='Diperbarui '+new Date().toLocaleTimeString('id-ID')+' — otomatis tiap 60 detik.';
+  }catch(e){
+    $('status').textContent='Gagal memuat data — periksa koneksi. Mencoba lagi otomatis…';
+  }
+}
+load();
+setInterval(()=>{ if(!document.hidden) load(); },60000);
+document.addEventListener('visibilitychange',()=>{ if(!document.hidden) load(); });
+</script>
+</body>
+</html>
