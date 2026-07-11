@@ -141,7 +141,9 @@ function renderList(){
   $('dlGrouping').innerHTML=uniq('grouping').map(v=>'<option value="'+esc(v)+'">').join('');
   const rows=items.filter(i=>
     (!q||[i.pengirim,i.tujuan,i.grouping].join(' ').toLowerCase().includes(q))&&
-    (!g||i.grouping===g)&&(!only||isIncomplete(i)));
+    (!g||i.grouping===g)&&(!only||isIncomplete(i)))
+    // yang belum lengkap selalu di paling atas
+    .sort((a,b)=>(isIncomplete(b)?1:0)-(isIncomplete(a)?1:0));
   const nInc=items.filter(isIncomplete).length;
   $('countLine').textContent=rows.length+' dari '+items.length+' karangan'+
     (nInc?' · '+nInc+' belum lengkap':'');
