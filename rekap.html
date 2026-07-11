@@ -54,6 +54,21 @@ td.num,th.num{ text-align:right; font-variant-numeric:tabular-nums;}
 .status{ color:var(--muted); font-size:.8rem; text-align:center; margin:10px 0;}
 .empty{ text-align:center; color:var(--muted); padding:40px 16px;}
 a{color:var(--accent);}
+.item.incomplete{ border-color:var(--accent); border-style:dashed;}
+.fill{ margin-top:8px; display:flex; flex-direction:column; gap:6px;}
+.fill input{ width:100%; padding:8px 10px; border:1px solid var(--line);
+  border-radius:8px; background:var(--bg); color:var(--ink); font-size:.9rem;}
+.fill button{ align-self:flex-start; padding:8px 14px; border-radius:8px; border:none;
+  background:var(--accent); color:var(--accent-ink); font-weight:700; font-size:.85rem; cursor:pointer;}
+.fill button:disabled{ opacity:.6;}
+.fill .hint{ font-size:.75rem; color:var(--accent); font-weight:600;}
+.chk{ display:flex; align-items:center; gap:6px; font-size:.85rem; color:var(--muted);
+  margin:4px 2px;}
+.toast{ position:fixed; left:50%; transform:translateX(-50%); bottom:24px;
+  background:var(--ink); color:var(--bg); padding:10px 18px; border-radius:999px;
+  font-size:.9rem; z-index:60; box-shadow:var(--shadow); opacity:0;
+  transition:opacity .25s; pointer-events:none;}
+.toast.show{opacity:1;}
 </style>
 </head>
 <body>
@@ -71,16 +86,21 @@ a{color:var(--accent);}
 
   <div class="card">
     <h3>Daftar karangan</h3>
+    <p style="color:var(--muted); font-size:.83rem;">Karangan yang <b>belum ada tujuan/grouping</b> bisa langsung diisi di sini — kalau kenal pengirimnya, bantu lengkapi ya 🙏 Isian tersimpan otomatis ke catatan keluarga.</p>
     <div class="filters">
       <input type="search" id="q" placeholder="Cari pengirim / tujuan…">
       <select id="fg"><option value="">Semua grouping</option></select>
     </div>
+    <label class="chk"><input type="checkbox" id="onlyIncomplete"> Tampilkan yang belum lengkap saja</label>
     <div class="count-line" id="countLine"></div>
     <div id="list"></div>
   </div>
 
   <p class="status" id="status">Memuat data…</p>
 </main>
+<datalist id="dlTujuan"></datalist>
+<datalist id="dlGrouping"></datalist>
+<div class="toast" id="toast"></div>
 
 <script>
 'use strict';
@@ -112,23 +132,62 @@ function render(){
       '<option '+(g===cur?'selected':'')+' value="'+esc(g)+'">'+esc(g)+'</option>').join('');
   renderList();
 }
+function isIncomplete(i){ return !i.tujuan||!i.grouping; }
 function renderList(){
-  const q=$('q').value.trim().toLowerCase(), g=$('fg').value;
+  const q=$('q').value.trim().toLowerCase(), g=$('fg').value,
+    only=$('onlyIncomplete').checked;
+  const uniq=k=>[...new Set(items.map(i=>i[k]).filter(Boolean))].sort();
+  $('dlTujuan').innerHTML=uniq('tujuan').map(v=>'<option value="'+esc(v)+'">').join('');
+  $('dlGrouping').innerHTML=uniq('grouping').map(v=>'<option value="'+esc(v)+'">').join('');
   const rows=items.filter(i=>
     (!q||[i.pengirim,i.tujuan,i.grouping].join(' ').toLowerCase().includes(q))&&
-    (!g||i.grouping===g));
-  $('countLine').textContent=rows.length+' dari '+items.length+' karangan';
+    (!g||i.grouping===g)&&(!only||isIncomplete(i)));
+  const nInc=items.filter(isIncomplete).length;
+  $('countLine').textContent=rows.length+' dari '+items.length+' karangan'+
+    (nInc?' · '+nInc+' belum lengkap':'');
   $('list').innerHTML=rows.length?rows.map(i=>{
-    const u=driveThumb(i.fotoUrl);
-    return '<div class="item">'+
+    const u=driveThumb(i.fotoUrl), inc=isIncomplete(i);
+    return '<div class="item'+(inc?' incomplete':'')+'" data-cid="'+esc(i.cid)+'">'+
       (u?'<a href="'+esc(i.fotoUrl)+'" target="_blank" rel="noopener"><img src="'+u+'" alt="" loading="lazy" onerror="this.parentNode.outerHTML=\'<div class=noimg>🌸</div>\'"></a>':'<div class="noimg">🌸</div>')+
       '<div class="info"><div class="from">'+esc(i.pengirim)+'</div>'+
       '<div class="meta">'+fmtDate(i.tanggal)+(i.tujuan?' · untuk '+esc(i.tujuan):'')+'</div>'+
       '<div><span class="badge">'+esc(i.jenis||'-')+'</span>'+
-      (i.grouping?'<span class="badge g">'+esc(i.grouping)+'</span>':'')+'</div></div></div>';
+      (i.grouping?'<span class="badge g">'+esc(i.grouping)+'</span>':'')+'</div>'+
+      (inc?'<div class="fill"><span class="hint">Kenal pengirim ini? Bantu lengkapi:</span>'+
+        (!i.tujuan?'<input list="dlTujuan" data-f="tujuan" placeholder="Ditujukan ke… (nama anak/keluarga)">':'')+
+        (!i.grouping?'<input list="dlGrouping" data-f="grouping" placeholder="Grouping… (anak ke berapa / relasi siapa)">':'')+
+        '<button type="button" class="save-fill">✓ Simpan</button></div>':'')+
+      '</div></div>';
   }).join(''):'<div class="empty">Tidak ada yang cocok.</div>';
 }
-['q','fg'].forEach(id=>$(id).addEventListener('input',renderList));
+['q','fg','onlyIncomplete'].forEach(id=>$(id).addEventListener('input',renderList));
+
+function toast(msg){ const t=$('toast'); t.textContent=msg; t.classList.add('show');
+  clearTimeout(t._h); t._h=setTimeout(()=>t.classList.remove('show'),2500); }
+
+$('list').addEventListener('click',async e=>{
+  const btn=e.target.closest('.save-fill'); if(!btn) return;
+  const card=btn.closest('.item'), cid=card.dataset.cid;
+  const i=items.find(x=>x.cid===cid); if(!i) return;
+  const vals={};
+  card.querySelectorAll('.fill input').forEach(inp=>{ vals[inp.dataset.f]=inp.value.trim(); });
+  if(!Object.values(vals).some(v=>v)){ toast('Isi dulu salah satu kolomnya'); return; }
+  btn.disabled=true; btn.textContent='Menyimpan…';
+  try{
+    const payload={ action:'upsert', cid:i.cid, tanggal:i.tanggal, jenis:i.jenis,
+      pengirim:i.pengirim, tujuan:vals.tujuan!==undefined&&vals.tujuan?vals.tujuan:i.tujuan,
+      grouping:vals.grouping!==undefined&&vals.grouping?vals.grouping:i.grouping,
+      catatan:i.catatan||'' };
+    const j=await(await fetch(SYNC_URL,{method:'POST',body:JSON.stringify(payload)})).json();
+    if(!j.ok) throw new Error(j.error||'ditolak');
+    i.tujuan=payload.tujuan; i.grouping=payload.grouping;
+    toast('Tersimpan — terima kasih 🙏');
+    render();
+  }catch(err){
+    toast('Gagal menyimpan: '+((err&&err.message)||err));
+    btn.disabled=false; btn.textContent='✓ Simpan';
+  }
+});
 
 async function load(){
   try{
