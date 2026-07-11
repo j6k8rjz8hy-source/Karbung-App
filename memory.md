@@ -118,6 +118,17 @@ HP keluarga (rekap.html)   ──┘                                └─► Go
 5. Error harus **selalu tampil ke user** (toast/baris status dengan pesan asli) —
    kegagalan diam-diam pernah bikin debugging sangat lama.
 
+## Concurrency: input manual + app bersamaan
+
+- Semua tulisan app lewat `LockService` di Apps Script → antar-app tidak pernah tabrakan.
+- App append di bawah baris terisi terakhir dan edit/hapus mencari baris via CID
+  (bukan nomor baris) → aman terhadap baris manual yang muncul kapan pun.
+- Baris manual diberi CID otomatis saat `action=list` → ikut sistem tanpa bentrok.
+- Risiko sisa: (1) race sub-detik bila manusia mengetik di baris kosong terbawah
+  tepat saat app append — jarang, terlihat jelas, perbaiki manual;
+  (2) entri ganda bila dua orang mencatat karangan yang sama lewat jalur berbeda —
+  masalah proses, bukan teknis. Hindari sort/hapus/sisip baris massal saat jam ramai.
+
 ## Insiden yang pernah terjadi (pelajaran)
 
 - **"Data hilang semua"**: data lokal terikat **per-origin** (alamat situs) dan
